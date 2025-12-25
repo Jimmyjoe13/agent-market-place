@@ -7,7 +7,17 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  NEXT_PUBLIC_API_URL = "https://rag-agent-api.onrender.com/api/v1"
+  # Note: NEXT_PUBLIC_API_URL doit être configuré dans les Variables d'environnement Netlify
+  # et non ici pour éviter le scan de secrets
+
+# Désactiver le scan de secrets pour les variables NEXT_PUBLIC (intentionnellement publiques)
+[build.processing.css]
+  bundle = true
+  minify = true
+
+# Exclure les variables publiques du scan de secrets
+[secrets-scanning]
+  omit_keys = ["NEXT_PUBLIC_API_URL"]
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
