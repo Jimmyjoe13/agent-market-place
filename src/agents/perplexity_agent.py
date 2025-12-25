@@ -42,16 +42,18 @@ class PerplexityAgent(LoggerMixin):
     
     Attributes:
         api_key: Clé API Perplexity.
-        model: Modèle à utiliser (llama-3.1-sonar-small-128k-online).
+        model: Modèle à utiliser (sonar, sonar-pro, etc.).
     """
     
     API_URL = "https://api.perplexity.ai/chat/completions"
     
-    # Modèles disponibles
+    # Modèles disponibles (mis à jour décembre 2024)
+    # Documentation: https://docs.perplexity.ai/getting-started/models
     MODELS = {
-        "small": "llama-3.1-sonar-small-128k-online",
-        "large": "llama-3.1-sonar-large-128k-online",
-        "huge": "llama-3.1-sonar-huge-128k-online",
+        "small": "sonar",                    # Recherche légère et économique
+        "large": "sonar-pro",                # Recherche avancée
+        "reasoning": "sonar-reasoning-pro",  # Raisonnement avec Chain of Thought
+        "research": "sonar-deep-research",   # Recherche approfondie
     }
     
     def __init__(
