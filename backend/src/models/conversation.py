@@ -196,11 +196,21 @@ class ConversationAnalytics(BaseModel):
         daily_counts: Nombre par jour.
     """
     
-    total_conversations: int = Field(..., ge=0)
+    total_conversations: int = Field(default=0, ge=0)
     avg_feedback_score: float | None = Field(default=None, ge=1.0, le=5.0)
-    flagged_count: int = Field(..., ge=0)
+    flagged_count: int = Field(default=0, ge=0)
     feedback_distribution: dict[str, int] = Field(default_factory=dict)
     daily_counts: dict[str, int] = Field(default_factory=dict)
+    
+    @field_validator("feedback_distribution", "daily_counts", mode="before")
+    @classmethod
+    def convert_none_to_dict(cls, v: Any) -> dict:
+        """Convertit None en dictionnaire vide."""
+        if v is None:
+            return {}
+        if isinstance(v, dict):
+            return v
+        return {}
 
 
 class FeedbackCreate(BaseModel):

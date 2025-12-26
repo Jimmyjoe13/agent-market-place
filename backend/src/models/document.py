@@ -5,6 +5,7 @@ Document Models
 Modèles Pydantic pour les documents vectorisés du système RAG.
 """
 
+import json
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -118,6 +119,28 @@ class Document(DocumentCreate):
         default_factory=datetime.utcnow,
         description="Date de dernière modification",
     )
+    
+    @field_validator("embedding", mode="before")
+    @classmethod
+    def parse_embedding(cls, v: Any) -> list[float] | None:
+        """
+        Parse l'embedding depuis une string JSON si nécessaire.
+        
+        Supabase/pgvector retourne les vecteurs sous forme de string JSON.
+        Ce validateur les convertit en vraies listes Python.
+        """
+        if v is None:
+            return None
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return [float(x) for x in parsed]
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
+        return None
     
     model_config = {"from_attributes": True}
 
