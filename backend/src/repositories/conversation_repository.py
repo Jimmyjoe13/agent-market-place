@@ -65,8 +65,9 @@ class ConversationRepository(BaseRepository[Conversation]):
             "session_id": conv.session_id,
             "user_query": conv.user_query,
             "ai_response": conv.ai_response,
-            "context_sources": [s.model_dump() for s in conv.context_sources],
-            "metadata": conv.metadata.model_dump(),
+            # mode='json' convertit automatiquement les UUIDs en strings
+            "context_sources": [s.model_dump(mode="json") for s in conv.context_sources],
+            "metadata": conv.metadata.model_dump(mode="json"),
         }
         return self.create(data)
     
