@@ -72,10 +72,11 @@ export interface IngestResponse {
 
 export interface ApiKeyCreate {
   name: string;
-  scopes: ("query" | "ingest" | "feedback" | "admin")[];
+  scopes: (string | "query" | "ingest" | "feedback" | "admin")[];
   rate_limit_per_minute?: number;
   monthly_quota?: number;
   expires_in_days?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ApiKeyResponse {

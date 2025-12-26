@@ -1,22 +1,23 @@
 /**
- * Login Page
- * ===========
+ * Register Page
+ * ==============
  * 
- * Page de connexion avec authentification Google OAuth.
- * Design moderne et premium inspiré des Developer Platforms.
+ * Page d'inscription avec authentification OAuth.
+ * Design moderne et premium avec mise en avant des avantages.
  */
 
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { LoginForm } from "@/components/auth/login-form";
+import { RegisterForm } from "@/components/auth/register-form";
 
 export const metadata = {
-  title: "Connexion | RAG Agent Platform",
-  description: "Connectez-vous à votre compte développeur",
+  title: "Inscription | RAG Agent Platform",
+  description: "Créez votre compte développeur gratuit et commencez à utiliser l'API",
 };
 
-export default async function LoginPage() {
+export default async function RegisterPage() {
   // Rediriger si déjà connecté
   const session = await auth();
   if (session?.user) {
@@ -36,48 +37,44 @@ export default async function LoginPage() {
       <div className="relative z-10 w-full max-w-md px-4">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-cyan-500 mb-4">
-            <svg
-              className="w-8 h-8 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
-            </svg>
-          </div>
+          <Link href="/" className="inline-block">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-cyan-500 mb-4 hover:scale-105 transition-transform">
+              <svg
+                className="w-8 h-8 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                />
+              </svg>
+            </div>
+          </Link>
           <h1 className="text-3xl font-bold text-white mb-2">
-            RAG Agent Platform
+            Créez votre compte
           </h1>
           <p className="text-slate-400">
-            Developer Platform pour agents IA augmentés
+            Rejoignez des milliers de développeurs qui utilisent RAG Agent
           </p>
         </div>
 
-        {/* Login Card */}
+        {/* Register Card */}
         <div className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 p-8 shadow-2xl">
           <h2 className="text-xl font-semibold text-white text-center mb-6">
-            Connexion
+            Inscription gratuite
           </h2>
           
           <Suspense fallback={<div className="h-12 bg-white/5 rounded-lg animate-pulse" />}>
-            <LoginForm />
+            <RegisterForm />
           </Suspense>
 
-          <div className="mt-6 text-center space-y-4">
+          <div className="mt-6 text-center">
             <p className="text-sm text-slate-400">
-              Pas encore de compte ?{" "}
-              <a href="/register" className="text-purple-400 hover:text-purple-300 transition-colors font-medium">
-                Créer un compte gratuitement
-              </a>
-            </p>
-            <p className="text-xs text-slate-500">
-              En vous connectant, vous acceptez nos{" "}
+              En vous inscrivant, vous acceptez nos{" "}
               <a href="/terms" className="text-purple-400 hover:text-purple-300 transition-colors">
                 Conditions d&apos;utilisation
               </a>{" "}
@@ -89,20 +86,22 @@ export default async function LoginPage() {
           </div>
         </div>
 
-        {/* Features */}
-        <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-          <div className="p-4">
-            <div className="text-2xl mb-2">🔑</div>
-            <p className="text-xs text-slate-400">Clés API<br />Self-Service</p>
+        {/* Testimonial / Social Proof */}
+        <div className="mt-8 text-center">
+          <div className="flex justify-center items-center gap-2 mb-2">
+            <div className="flex -space-x-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-cyan-400 border-2 border-slate-900"
+                />
+              ))}
+            </div>
+            <span className="text-slate-400 text-sm ml-2">+500 développeurs</span>
           </div>
-          <div className="p-4">
-            <div className="text-2xl mb-2">📊</div>
-            <p className="text-xs text-slate-400">Analytics<br />Temps réel</p>
-          </div>
-          <div className="p-4">
-            <div className="text-2xl mb-2">🚀</div>
-            <p className="text-xs text-slate-400">Playground<br />Interactif</p>
-          </div>
+          <p className="text-xs text-slate-500">
+            Rejoignez une communauté en pleine croissance
+          </p>
         </div>
       </div>
     </div>

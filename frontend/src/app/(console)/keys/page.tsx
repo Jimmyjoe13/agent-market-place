@@ -1,94 +1,93 @@
 /**
- * Page de gestion des clés API (Admin)
+ * Page de gestion des clés API (Self-Service)
+ * ============================================
+ * 
+ * Interface utilisateur pour créer et gérer ses clés API.
+ * Utilise la session NextAuth pour l'authentification.
  */
 
 "use client";
 
-import { useState } from "react";
-import { Key, Plus, Trash2, Copy, Check, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useSession } from "next-auth/react";
+import { redirect } from "next/navigation";
+import { ApiKeyManager } from "@/components/console/ApiKeyManager";
+import { Card, CardContent } from "@/components/ui/card";
+import { AlertCircle, Key } from "lucide-react";
 
 export default function KeysPage() {
-  const [masterKey, setMasterKey] = useState("");
-  const [copied, setCopied] = useState(false);
+  const { status } = useSession();
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  // Rediriger vers login si non authentifié
+  if (status === "unauthenticated") {
+    redirect("/login");
+  }
+
+  // Loading state
+  if (status === "loading") {
+    return (
+      <div className="h-full overflow-y-auto p-8">
+        <div className="mx-auto max-w-4xl">
+          <div className="mb-8">
+            <div className="h-8 w-48 bg-zinc-800 rounded animate-pulse" />
+            <div className="h-4 w-72 bg-zinc-800 rounded animate-pulse mt-2" />
+          </div>
+          <Card className="border-zinc-800 bg-zinc-900/50">
+            <CardContent className="py-12">
+              <div className="flex items-center justify-center">
+                <Key className="h-6 w-6 animate-pulse text-zinc-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto p-8">
       <div className="mx-auto max-w-4xl">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold">Gestion des Clés API</h1>
-          <p className="text-zinc-400">
-            Créez et gérez les clés d&apos;accès à l&apos;API (nécessite la Master Key)
+          <h1 className="text-2xl font-bold">Clés API</h1>
+          <p className="text-zinc-400 mt-1">
+            Créez et gérez vos clés d&apos;accès à l&apos;API RAG Agent.
           </p>
         </div>
-
-        {/* Master Key Input */}
-        <Card className="mb-8 border-zinc-800 bg-zinc-900/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5 text-amber-400" />
-              Master Key
-            </CardTitle>
-            <CardDescription>
-              Entrez votre Master Key pour accéder à la gestion des clés
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-3">
-              <Input
-                type="password"
-                value={masterKey}
-                onChange={(e) => setMasterKey(e.target.value)}
-                placeholder="master_xxxxxxxxxxxxxxxx"
-                className="flex-1 bg-zinc-800"
-              />
-              <Button
-                disabled={!masterKey.trim()}
-                className="bg-amber-600 hover:bg-amber-500"
-              >
-                Connecter
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Info Card */}
-        <Card className="border-amber-500/20 bg-amber-500/5">
+        <Card className="mb-6 border-indigo-500/20 bg-indigo-500/5">
           <CardContent className="flex items-start gap-4 pt-6">
-            <AlertCircle className="h-5 w-5 shrink-0 text-amber-400" />
+            <AlertCircle className="h-5 w-5 shrink-0 text-indigo-400" />
             <div className="text-sm">
-              <p className="mb-2 font-medium text-amber-300">
-                Fonctionnalité Admin
+              <p className="mb-2 font-medium text-indigo-300">
+                À propos des clés API
               </p>
-              <p className="text-amber-400/80">
-                Cette page permet aux administrateurs de créer et gérer les clés API.
-                Vous devez avoir la Master Key pour accéder à ces fonctionnalités.
-                Contactez l&apos;administrateur système si vous n&apos;avez pas la Master Key.
+              <p className="text-indigo-400/80">
+                Vos clés API permettent d&apos;authentifier vos applications auprès de l&apos;API.
+                Chaque clé dispose de permissions spécifiques (query, feedback, ingest).
+                Ne partagez jamais vos clés et révoque-les immédiatement si elles sont compromises.
               </p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Placeholder for keys list when authenticated */}
-        <div className="mt-8 rounded-xl border border-dashed border-zinc-700 p-12 text-center">
-          <Key className="mx-auto mb-4 h-12 w-12 text-zinc-600" />
-          <h3 className="mb-2 text-lg font-medium text-zinc-400">
-            Authentification requise
-          </h3>
-          <p className="text-sm text-zinc-500">
-            Entrez votre Master Key ci-dessus pour voir et gérer les clés API
-          </p>
-        </div>
+        {/* API Key Manager */}
+        <ApiKeyManager />
+
+        {/* Usage Example */}
+        <Card className="mt-6 border-zinc-800 bg-zinc-900/50">
+          <CardContent className="pt-6">
+            <h3 className="font-medium text-zinc-200 mb-3">Exemple d&apos;utilisation</h3>
+            <pre className="rounded-lg bg-zinc-950 p-4 text-sm overflow-x-auto">
+              <code className="text-zinc-300">
+{`curl -X POST https://api.rag-agent.com/api/v1/query \\
+  -H "X-API-Key: sk-proj-votre_cle_ici" \\
+  -H "Content-Type: application/json" \\
+  -d '{"question": "Quelles sont mes compétences?"}'`}
+              </code>
+            </pre>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

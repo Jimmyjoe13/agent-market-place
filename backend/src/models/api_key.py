@@ -166,7 +166,9 @@ class ApiKeyInfo(BaseModel):
     is_active: bool = Field(..., description="Clé active")
     expires_at: datetime | None = Field(default=None)
     last_used_at: datetime | None = Field(default=None)
+    created_at: datetime | None = Field(default=None, description="Date de création")
     model_config = {"from_attributes": True}
+
 
 
 class ApiKeyValidation(BaseModel):
