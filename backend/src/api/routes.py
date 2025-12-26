@@ -267,8 +267,7 @@ async def ingest_github(
             key_id=str(api_key.id),
             repos=len(request.repositories),
             created=stats.total_created,
-        
-        
+        )
         return IngestResponse(
             success=True,
             documents_created=stats.total_created,
