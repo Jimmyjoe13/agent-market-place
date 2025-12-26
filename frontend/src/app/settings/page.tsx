@@ -1,23 +1,28 @@
 /**
  * Page des paramètres - Configuration de la clé API
+ * Utilise sonner pour les notifications et React Query pour le status API
  */
 
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, Eye, EyeOff, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Save, Eye, EyeOff, Loader2, Key, Server, Shield } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { LoadingSpinner } from "@/components/ui/states";
 import { api } from "@/lib/api";
 
 export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [isSaving, setIsSaving] = useState(false);
   const [savedKey, setSavedKey] = useState<string | null>(null);
 
+  // Charger la clé stockée au montage
   useEffect(() => {
     const stored = api.getStoredApiKey();
     if (stored) {
@@ -27,23 +32,37 @@ export default function SettingsPage() {
   }, []);
 
   const handleSave = async () => {
-    if (!apiKey.trim()) return;
+    if (!apiKey.trim()) {
+      toast.warning("Clé requise", {
+        description: "Veuillez entrer une clé API valide.",
+      });
+      return;
+    }
 
-    setStatus("loading");
+    setIsSaving(true);
+    const toastId = toast.loading("Vérification de la clé...");
     
-    // Test the API key by making a request
     try {
       api.setApiKey(apiKey.trim());
       const health = await api.healthCheck();
+      
       if (health.status === "healthy") {
-        setStatus("success");
+        toast.success("Clé API configurée", {
+          id: toastId,
+          description: "Connexion établie avec le backend.",
+        });
         setSavedKey(apiKey.trim());
-        setTimeout(() => setStatus("idle"), 3000);
+      } else {
+        throw new Error("Backend non disponible");
       }
-    } catch {
-      setStatus("error");
+    } catch (error) {
       api.clearApiKey();
-      setTimeout(() => setStatus("idle"), 3000);
+      toast.error("Clé invalide", {
+        id: toastId,
+        description: "Impossible de se connecter. Vérifiez votre clé API.",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -51,7 +70,9 @@ export default function SettingsPage() {
     api.clearApiKey();
     setApiKey("");
     setSavedKey(null);
-    setStatus("idle");
+    toast.info("Clé supprimée", {
+      description: "Votre clé API a été supprimée du stockage local.",
+    });
   };
 
   return (
@@ -59,17 +80,25 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-2xl">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold">Paramètres</h1>
-          <p className="text-zinc-400">Configurez votre accès à l&apos;API RAG Agent</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20">
+              <Shield className="h-5 w-5 text-indigo-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">Paramètres</h1>
+              <p className="text-zinc-400">Configurez votre accès à l&apos;API RAG Agent</p>
+            </div>
+          </div>
         </div>
 
         {/* API Key Card */}
-        <Card className="border-zinc-800 bg-zinc-900/50">
+        <Card className="border-zinc-800 bg-zinc-900/50 backdrop-blur">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5 text-indigo-400" />
               Clé API
               {savedKey && (
-                <Badge variant="outline" className="border-green-500/50 text-green-400">
+                <Badge variant="outline" className="ml-2 border-green-500/50 text-green-400">
                   Configurée
                 </Badge>
               )}
@@ -86,7 +115,8 @@ export default function SettingsPage() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="rag_xxxxxxxxxxxxxxxx"
-                className="bg-zinc-800 pr-10"
+                className="bg-zinc-800 border-zinc-700 pr-10 focus:border-indigo-500"
+                disabled={isSaving}
               />
               <Button
                 type="button"
@@ -94,6 +124,7 @@ export default function SettingsPage() {
                 variant="ghost"
                 className="absolute right-0 top-0 h-full px-3 text-zinc-400 hover:text-zinc-100"
                 onClick={() => setShowKey(!showKey)}
+                disabled={isSaving}
               >
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
@@ -102,29 +133,22 @@ export default function SettingsPage() {
             <div className="flex gap-3">
               <Button
                 onClick={handleSave}
-                disabled={!apiKey.trim() || status === "loading"}
+                disabled={!apiKey.trim() || isSaving}
                 className="gap-2 bg-indigo-600 hover:bg-indigo-500"
               >
-                {status === "loading" ? (
+                {isSaving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : status === "success" ? (
-                  <CheckCircle className="h-4 w-4" />
-                ) : status === "error" ? (
-                  <AlertCircle className="h-4 w-4" />
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                {status === "success"
-                  ? "Sauvegardé !"
-                  : status === "error"
-                  ? "Clé invalide"
-                  : "Sauvegarder"}
+                {isSaving ? "Vérification..." : "Sauvegarder"}
               </Button>
 
               {savedKey && (
                 <Button
                   variant="outline"
                   onClick={handleClear}
+                  disabled={isSaving}
                   className="border-zinc-700 hover:bg-zinc-800"
                 >
                   Supprimer
@@ -145,9 +169,12 @@ export default function SettingsPage() {
         </Card>
 
         {/* API Status Card */}
-        <Card className="mt-6 border-zinc-800 bg-zinc-900/50">
+        <Card className="mt-6 border-zinc-800 bg-zinc-900/50 backdrop-blur">
           <CardHeader>
-            <CardTitle>État de l&apos;API</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5 text-indigo-400" />
+              État de l&apos;API
+            </CardTitle>
             <CardDescription>
               Vérifiez la connexion avec le backend
             </CardDescription>
@@ -161,52 +188,57 @@ export default function SettingsPage() {
   );
 }
 
-// Composant pour l'état de l'API
+// Composant pour l'état de l'API avec React Query
 function ApiStatus() {
-  const [status, setStatus] = useState<"loading" | "online" | "offline">("loading");
-  const [version, setVersion] = useState<string | null>(null);
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["api-health"],
+    queryFn: async () => {
+      const health = await api.healthCheck();
+      return health;
+    },
+    refetchInterval: 30000, // Rafraîchir toutes les 30 secondes
+    retry: 1,
+  });
 
-  useEffect(() => {
-    const checkStatus = async () => {
-      try {
-        const health = await api.healthCheck();
-        setStatus(health.status === "healthy" ? "online" : "offline");
-        setVersion(health.version);
-      } catch {
-        setStatus("offline");
-      }
-    };
-
-    checkStatus();
-    const interval = setInterval(checkStatus, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, []);
+  const status = isLoading ? "loading" : isError ? "offline" : data?.status === "healthy" ? "online" : "offline";
 
   return (
-    <div className="flex items-center gap-4">
-      <div className="flex items-center gap-2">
-        <div
-          className={`h-3 w-3 rounded-full ${
-            status === "loading"
-              ? "animate-pulse bg-zinc-500"
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <div
+            className={`h-3 w-3 rounded-full ${
+              status === "loading"
+                ? "animate-pulse bg-zinc-500"
+                : status === "online"
+                ? "bg-green-500 shadow-lg shadow-green-500/20"
+                : "bg-red-500 shadow-lg shadow-red-500/20"
+            }`}
+          />
+          <span className="text-sm">
+            {status === "loading"
+              ? "Vérification..."
               : status === "online"
-              ? "bg-green-500"
-              : "bg-red-500"
-          }`}
-        />
-        <span className="text-sm">
-          {status === "loading"
-            ? "Vérification..."
-            : status === "online"
-            ? "En ligne"
-            : "Hors ligne"}
-        </span>
+              ? "En ligne"
+              : "Hors ligne"}
+          </span>
+        </div>
+        {data?.version && (
+          <Badge variant="outline" className="border-zinc-700 text-zinc-400">
+            v{data.version}
+          </Badge>
+        )}
       </div>
-      {version && (
-        <Badge variant="outline" className="border-zinc-700 text-zinc-400">
-          v{version}
-        </Badge>
-      )}
+      
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => refetch()}
+        disabled={isLoading}
+        className="text-zinc-400 hover:text-zinc-100"
+      >
+        {isLoading ? <LoadingSpinner size="sm" /> : "Actualiser"}
+      </Button>
     </div>
   );
 }

@@ -1,10 +1,11 @@
 /**
- * Providers pour l'application (React Query, Theme, etc.)
+ * Providers pour l'application (React Query, Theme, Notifications)
  */
 
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "sonner";
 import { useState } from "react";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -23,6 +24,26 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       {children}
+      <Toaster
+        position="top-right"
+        expand={false}
+        richColors
+        closeButton
+        theme="dark"
+        toastOptions={{
+          style: {
+            background: "hsl(240 10% 10%)",
+            border: "1px solid hsl(240 5% 20%)",
+            color: "hsl(0 0% 95%)",
+          },
+          classNames: {
+            success: "!bg-green-950/90 !border-green-800/50",
+            error: "!bg-red-950/90 !border-red-800/50",
+            warning: "!bg-amber-950/90 !border-amber-800/50",
+            info: "!bg-indigo-950/90 !border-indigo-800/50",
+          },
+        }}
+      />
     </QueryClientProvider>
   );
 }
