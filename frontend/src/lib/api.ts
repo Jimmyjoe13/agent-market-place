@@ -1,8 +1,10 @@
 /**
  * Client API pour RAG Agent
+ * Avec gestion centralisée des erreurs et rate limiting
  */
 
 import axios, { AxiosInstance, AxiosError } from "axios";
+import { handleRateLimitError, isRateLimited, getRateLimitInfo } from "./error-handling";
 import type {
   QueryRequest,
   QueryResponse,
@@ -33,10 +35,19 @@ class ApiClient {
       headers: {
         "Content-Type": "application/json",
       },
+      timeout: 30000, // 30 secondes
     });
 
-    // Interceptor pour ajouter la clé API
+    // Interceptor pour ajouter la clé API et vérifier le rate limiting
     this.client.interceptors.request.use((config) => {
+      // Vérifier le rate limiting avant chaque requête
+      if (isRateLimited()) {
+        const info = getRateLimitInfo();
+        const error = new Error(`Rate limited. Retry after ${info.retryAfter} seconds.`);
+        error.name = "RateLimitError";
+        return Promise.reject(error);
+      }
+
       const key = this.apiKey || this.getStoredApiKey();
       if (key) {
         config.headers["X-API-Key"] = key;
@@ -48,10 +59,22 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       (error: AxiosError) => {
-        if (error.response?.status === 401) {
-          // Clé invalide, on la supprime
+        const status = error.response?.status;
+
+        // Gestion du rate limiting (429)
+        if (status === 429) {
+          const retryAfter = parseInt(
+            error.response?.headers?.["retry-after"] || "60",
+            10
+          );
+          handleRateLimitError(retryAfter);
+        }
+
+        // Clé invalide (401)
+        if (status === 401) {
           this.clearApiKey();
         }
+
         return Promise.reject(error);
       }
     );

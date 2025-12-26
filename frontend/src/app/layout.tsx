@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Sidebar } from "@/components/sidebar";
+import { SectionErrorBoundary } from "@/components/ui/error-boundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,11 +34,15 @@ export default function RootLayout({
         <Providers>
           <div className="flex h-screen">
             {/* Sidebar */}
-            <Sidebar />
+            <SectionErrorBoundary name="Sidebar">
+              <Sidebar />
+            </SectionErrorBoundary>
             
             {/* Main Content */}
             <main className="flex-1 overflow-hidden">
-              {children}
+              <SectionErrorBoundary name="Content">
+                {children}
+              </SectionErrorBoundary>
             </main>
           </div>
         </Providers>
@@ -45,3 +50,4 @@ export default function RootLayout({
     </html>
   );
 }
+
