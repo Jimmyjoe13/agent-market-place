@@ -67,13 +67,18 @@ export const authConfig: NextAuthConfig = {
         
         console.log("[Auth] Syncing user with backend:", user.email);
         
-        const response = await fetch(`${backendUrl}/auth/callback/google`, {
+        // On préfère utiliser l'ID Token (JWT) pour l'identité
+        const token = account?.id_token || account?.access_token;
+        const endpoint = account?.id_token ? "/auth/verify-token/google" : "/auth/callback/google";
+        
+        const response = await fetch(`${backendUrl}${endpoint}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            code: account?.access_token,
+            token: account?.id_token, // Pour verify-token
+            code: account?.access_token, // Pour callback (fallback)
             provider: "google",
             email: user.email,
             name: user.name,
@@ -85,12 +90,11 @@ export const authConfig: NextAuthConfig = {
         if (!response.ok) {
           const errorText = await response.text();
           console.error("[Auth] Backend sync failed:", response.status, errorText);
-          // Continuer quand même - le backend créera l'utilisateur plus tard
+          // Continuer quand même en dev - le backend pourra peut-être récupérer l'user autrement
         } else {
           const data = await response.json();
           console.log("[Auth] Backend sync successful:", data.user?.id);
           
-          // Stocker l'ID utilisateur pour les requêtes ultérieures
           if (data.user?.id) {
             (user as any).backendUserId = data.user.id;
             (user as any).plan = data.user.plan_slug || "free";
@@ -100,7 +104,6 @@ export const authConfig: NextAuthConfig = {
         return true;
       } catch (error) {
         console.error("[Auth] Error syncing with backend:", error);
-        // Autoriser quand même la connexion - le frontend gèrera l'erreur
         return true;
       }
     },
@@ -110,7 +113,10 @@ export const authConfig: NextAuthConfig = {
       if (user) {
         token.id = (user as any).backendUserId || user.id;
         token.plan = (user as any).plan || "free";
-        token.accessToken = account?.access_token;
+      }
+      // Toujours prioriser l'ID Token s'il existe
+      if (account) {
+        token.accessToken = account.id_token || account.access_token;
       }
       return token;
     },
@@ -124,6 +130,7 @@ export const authConfig: NextAuthConfig = {
       }
       return session;
     },
+
   },
   pages: {
     signIn: "/login",

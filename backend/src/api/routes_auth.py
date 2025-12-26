@@ -42,9 +42,21 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 class OAuthCallbackRequest(BaseModel):
     """Données du callback OAuth."""
     
-    code: str = Field(..., description="Code d'autorisation OAuth")
+    code: str = Field(..., description="Code d'autorisation OAuth ou Access Token")
     provider: OAuthProvider = Field(..., description="Provider OAuth")
     redirect_uri: str | None = Field(default=None, description="URI de redirection")
+    # Optionnel: données déjà extraites par le frontend
+    email: str | None = None
+    name: str | None = None
+    avatar_url: str | None = None
+    provider_id: str | None = None
+
+
+class VerifyTokenRequest(BaseModel):
+    """Requête de vérification de token JWT."""
+    token: str = Field(..., description="ID Token JWT")
+    provider: OAuthProvider = Field(..., description="Provider OAuth")
+
 
 
 class TokenResponse(BaseModel):
@@ -88,17 +100,26 @@ async def google_oauth_callback(
     
     Échange le code d'autorisation contre un token d'accès,
     récupère les infos utilisateur et crée/met à jour le compte.
-    
-    Args:
-        request: Code OAuth et provider.
-        
-    Returns:
-        TokenResponse avec le token de session et les infos utilisateur.
     """
     settings = get_settings()
     repo = get_user_repo()
     
-    # Configuration Google OAuth
+    # 1. Si les infos sont déjà fournies (sync simple), on les utilise
+    if request.email and request.provider_id:
+        user = repo.get_or_create_oauth_user(
+            email=request.email,
+            name=request.name,
+            provider="google",
+            provider_id=request.provider_id,
+            avatar_url=request.avatar_url,
+        )
+        return TokenResponse(
+            access_token=secrets.token_urlsafe(32),
+            expires_in=60 * 60 * 24 * 7,
+            user=user,
+        )
+
+    # 2. Sinon, échange classique du code
     google_client_id = os.getenv("GOOGLE_CLIENT_ID")
     google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
     
@@ -108,7 +129,6 @@ async def google_oauth_callback(
             detail={"error": "oauth_not_configured", "message": "Google OAuth non configuré"}
         )
     
-    # 1. Échanger le code contre un token d'accès
     redirect_uri = request.redirect_uri or f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/api/auth/callback/google"
     
     async with httpx.AsyncClient() as client:
@@ -132,7 +152,6 @@ async def google_oauth_callback(
         
         token_data = GoogleTokenData(**token_response.json())
         
-        # 2. Récupérer les infos utilisateur
         user_response = await client.get(
             "https://www.googleapis.com/oauth2/v2/userinfo",
             headers={"Authorization": f"Bearer {token_data.access_token}"},
@@ -146,7 +165,6 @@ async def google_oauth_callback(
         
         google_user = GoogleUserInfo(**user_response.json())
     
-    # 3. Créer ou mettre à jour l'utilisateur
     user = repo.get_or_create_oauth_user(
         email=google_user.email,
         name=google_user.name or google_user.given_name,
@@ -155,12 +173,8 @@ async def google_oauth_callback(
         avatar_url=google_user.picture,
     )
     
-    # 4. Générer un token de session (simple pour l'instant, à améliorer avec JWT)
     session_token = secrets.token_urlsafe(32)
-    expires_in = 60 * 60 * 24 * 7  # 7 jours
-    
-    # TODO: Stocker le token en base ou utiliser JWT
-    # Pour l'instant, on utilise le format Supabase-compatible
+    expires_in = 60 * 60 * 24 * 7
     
     logger.info("User authenticated via Google", user_id=str(user.id), email=user.email)
     
@@ -169,6 +183,48 @@ async def google_oauth_callback(
         expires_in=expires_in,
         user=user,
     )
+
+
+@router.post("/verify-token/google", response_model=TokenResponse)
+async def verify_google_token(
+    request: VerifyTokenRequest,
+) -> TokenResponse:
+    """
+    Vérifie un ID Token Google et synchronise l'utilisateur.
+    """
+    from jose import jwt
+    repo = get_user_repo()
+    
+    try:
+        # En production, il faut vérifier la signature avec les clés publiques Google
+        # Pour le prototype, on décode sans vérifier pour extraire les claims
+        payload = jwt.get_unverified_claims(request.token)
+        
+        email = payload.get("email")
+        if not email:
+            raise HTTPException(status_code=401, detail="Email manquant dans le token")
+            
+        user = repo.get_or_create_oauth_user(
+            email=email,
+            name=payload.get("name"),
+            provider="google",
+            provider_id=payload.get("sub"),
+            avatar_url=payload.get("picture"),
+        )
+        
+        # Le backend génère son propre token de session (opaque ou JWT)
+        # Ici on réutilise le token transmis ou on en génère un nouveau
+        session_token = request.token # On peut passer le JWT ID Token comme token de session
+        
+        return TokenResponse(
+            access_token=session_token,
+            expires_in=60 * 60 * 24, # 24h
+            user=user,
+        )
+    except Exception as e:
+        logger.error("Token verification failed", error=str(e))
+        raise HTTPException(status_code=401, detail="Token invalide")
+
 
 
 @router.get("/me", response_model=UserWithSubscription)

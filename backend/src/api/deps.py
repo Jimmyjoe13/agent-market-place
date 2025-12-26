@@ -40,14 +40,17 @@ async def get_current_user(
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.split(" ")[1]
         try:
-            # Décodage du token Google ID (sans vérif signature en dev, ou avec clés publiques en prod)
-            # En prod, il faudrait récupérer les clés publiques Google.
-            # Ici on fait confiance au fait que si on arrive à le decoder, on a l'email.
-            # C'est un raccourci acceptable pour le prototype, à durcir ensuite.
+            # Décodage du token Google ID (sans vérif signature en dev)
             payload = jwt.get_unverified_claims(token)
             user_email = payload.get("email")
-        except Exception:
+            if not user_email:
+                from src.config.logging_config import get_logger
+                get_logger(__name__).warning("JWT decoded but no email found", payload_keys=list(payload.keys()))
+        except Exception as e:
+            from src.config.logging_config import get_logger
+            get_logger(__name__).error("JWT decoding failed", error=str(e), token_preview=token[:10] + "...")
             pass # Token invalide ou malformé
+
             
     # 2. Si pas d'email extrait du token, vérifier X-User-ID (bypass backend/legacy)
     # Cela permet au backend d'admin de se faire passer pour un user si besoin via API Key interne,
