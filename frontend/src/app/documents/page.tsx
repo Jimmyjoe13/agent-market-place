@@ -1,7 +1,7 @@
 /**
  * Page de gestion des documents (Ingestion)
  * Utilise React Hook Form + Zod pour la validation
- * et sonner pour les notifications toast
+ * et les hooks d'ingestion pour les mutations
  */
 
 "use client";
@@ -10,7 +10,6 @@ import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FileUp, Github, FileText, Upload, Loader2, Sparkles, X } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,7 +23,11 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { api } from "@/lib/api";
+import {
+  useTextIngestion,
+  usePdfIngestion,
+  useGithubIngestion,
+} from "@/hooks";
 import {
   textIngestionSchema,
   githubIngestionSchema,
@@ -93,6 +96,8 @@ export default function DocumentsPage() {
 // ===== Text Ingestion Form =====
 
 function TextIngestionForm() {
+  const { mutateAsync: ingestText, isPending } = useTextIngestion();
+  
   const form = useForm<TextIngestionFormData>({
     resolver: zodResolver(textIngestionSchema),
     defaultValues: {
@@ -101,32 +106,17 @@ function TextIngestionForm() {
     },
   });
 
-  const { isSubmitting } = form.formState;
   const contentValue = form.watch("content");
 
   async function onSubmit(values: TextIngestionFormData) {
-    const toastId = toast.loading("Ingestion en cours...", {
-      description: "Traitement de votre texte",
-    });
-
     try {
-      const response = await api.ingestText({
+      await ingestText({
         content: values.content,
-        source_id: `manual:${Date.now()}`,
         title: values.title || undefined,
       });
-
-      toast.success("Texte ingéré avec succès", {
-        id: toastId,
-        description: response.message || `${values.title || "Document"} ajouté à la base de connaissances`,
-      });
-
       form.reset();
-    } catch (error) {
-      toast.error("Échec de l'ingestion", {
-        id: toastId,
-        description: "Impossible d'ingérer le texte. Vérifiez votre connexion.",
-      });
+    } catch {
+      // L'erreur est déjà gérée par le hook
     }
   }
 
@@ -154,7 +144,7 @@ function TextIngestionForm() {
                     <Input
                       placeholder="Titre du document (optionnel)"
                       className="bg-zinc-800 border-zinc-700 focus:border-indigo-500"
-                      disabled={isSubmitting}
+                      disabled={isPending}
                       {...field}
                     />
                   </FormControl>
@@ -176,7 +166,7 @@ function TextIngestionForm() {
                     <Textarea
                       placeholder="Collez votre texte ici..."
                       className="min-h-[200px] bg-zinc-800 border-zinc-700 focus:border-indigo-500 resize-none"
-                      disabled={isSubmitting}
+                      disabled={isPending}
                       {...field}
                     />
                   </FormControl>
@@ -196,15 +186,15 @@ function TextIngestionForm() {
             <div className="flex justify-end">
               <Button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isPending}
                 className="gap-2 bg-indigo-600 hover:bg-indigo-500"
               >
-                {isSubmitting ? (
+                {isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Upload className="h-4 w-4" />
                 )}
-                {isSubmitting ? "Ingestion..." : "Ingérer"}
+                {isPending ? "Ingestion..." : "Ingérer"}
               </Button>
             </div>
           </form>
@@ -217,8 +207,8 @@ function TextIngestionForm() {
 // ===== PDF Ingestion Form =====
 
 function PdfIngestionForm() {
+  const { mutateAsync: ingestPdf, isPending } = usePdfIngestion();
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -260,27 +250,11 @@ function PdfIngestionForm() {
       return;
     }
 
-    setIsSubmitting(true);
-    const toastId = toast.loading("Upload en cours...", {
-      description: `Traitement de ${pdfFile.name}`,
-    });
-
     try {
-      const response = await api.ingestPdf(pdfFile);
-
-      toast.success("PDF importé avec succès", {
-        id: toastId,
-        description: response.message || `${pdfFile.name} ajouté à la base de connaissances`,
-      });
-
+      await ingestPdf(pdfFile);
       handleClearFile();
-    } catch (error) {
-      toast.error("Échec de l'upload", {
-        id: toastId,
-        description: "Impossible de traiter le PDF. Format invalide ou fichier corrompu.",
-      });
-    } finally {
-      setIsSubmitting(false);
+    } catch {
+      // L'erreur est déjà gérée par le hook
     }
   };
 
@@ -304,8 +278,8 @@ function PdfIngestionForm() {
                 : pdfFile
                 ? "border-indigo-500/50 bg-indigo-500/5"
                 : "border-zinc-700 hover:border-indigo-500/50 hover:bg-zinc-800/50"
-            } ${isSubmitting ? "pointer-events-none opacity-50" : ""}`}
-            onClick={() => !isSubmitting && fileInputRef.current?.click()}
+            } ${isPending ? "pointer-events-none opacity-50" : ""}`}
+            onClick={() => !isPending && fileInputRef.current?.click()}
           >
             <FileUp
               className={`mx-auto mb-4 h-12 w-12 ${
@@ -335,11 +309,11 @@ function PdfIngestionForm() {
               accept=".pdf,application/pdf"
               className="hidden"
               onChange={handleFileChange}
-              disabled={isSubmitting}
+              disabled={isPending}
             />
 
             {/* Clear button */}
-            {pdfFile && !isSubmitting && (
+            {pdfFile && !isPending && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -359,15 +333,15 @@ function PdfIngestionForm() {
         <div className="flex justify-end">
           <Button
             onClick={handleSubmit}
-            disabled={!pdfFile || isSubmitting || !!error}
+            disabled={!pdfFile || isPending || !!error}
             className="gap-2 bg-indigo-600 hover:bg-indigo-500"
           >
-            {isSubmitting ? (
+            {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Upload className="h-4 w-4" />
             )}
-            {isSubmitting ? "Upload..." : "Upload et Ingérer"}
+            {isPending ? "Upload..." : "Upload et Ingérer"}
           </Button>
         </div>
       </CardContent>
@@ -378,6 +352,8 @@ function PdfIngestionForm() {
 // ===== GitHub Ingestion Form =====
 
 function GithubIngestionForm() {
+  const { mutateAsync: ingestGithub, isPending } = useGithubIngestion();
+  
   const form = useForm<GithubIngestionFormData>({
     resolver: zodResolver(githubIngestionSchema),
     defaultValues: {
@@ -386,29 +362,15 @@ function GithubIngestionForm() {
     },
   });
 
-  const { isSubmitting } = form.formState;
-
   async function onSubmit(values: GithubIngestionFormData) {
-    const toastId = toast.loading("Import GitHub en cours...", {
-      description: `Indexation de ${values.repository}`,
-    });
-
     try {
-      const response = await api.ingestGithub({
-        repositories: [values.repository],
+      await ingestGithub({
+        repository: values.repository,
+        branch: values.branch || undefined,
       });
-
-      toast.success("Repository importé", {
-        id: toastId,
-        description: response.message || `${values.repository} ajouté à la base de connaissances`,
-      });
-
       form.reset();
-    } catch (error) {
-      toast.error("Échec de l'import GitHub", {
-        id: toastId,
-        description: "Repository introuvable ou accès refusé. Vérifiez le nom et qu'il est public.",
-      });
+    } catch {
+      // L'erreur est déjà gérée par le hook
     }
   }
 
@@ -436,7 +398,7 @@ function GithubIngestionForm() {
                     <Input
                       placeholder="owner/repository (ex: facebook/react)"
                       className="bg-zinc-800 border-zinc-700 focus:border-indigo-500"
-                      disabled={isSubmitting}
+                      disabled={isPending}
                       {...field}
                     />
                   </FormControl>
@@ -458,7 +420,7 @@ function GithubIngestionForm() {
                     <Input
                       placeholder="main (par défaut)"
                       className="bg-zinc-800 border-zinc-700 focus:border-indigo-500"
-                      disabled={isSubmitting}
+                      disabled={isPending}
                       {...field}
                     />
                   </FormControl>
@@ -473,15 +435,15 @@ function GithubIngestionForm() {
             <div className="flex justify-end">
               <Button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isPending}
                 className="gap-2 bg-indigo-600 hover:bg-indigo-500"
               >
-                {isSubmitting ? (
+                {isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Github className="h-4 w-4" />
                 )}
-                {isSubmitting ? "Import..." : "Importer"}
+                {isPending ? "Import..." : "Importer"}
               </Button>
             </div>
           </form>

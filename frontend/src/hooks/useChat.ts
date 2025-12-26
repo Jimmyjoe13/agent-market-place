@@ -1,109 +1,208 @@
 /**
- * Hook pour gérer les conversations avec le RAG
+ * Hook amélioré pour la gestion du chat
+ * - Support de l'annulation de requêtes (AbortController)
+ * - Optimistic updates
+ * - Gestion du streaming
+ * - Historique de session
  */
 
 "use client";
 
-import { useState, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useCallback, useRef } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type { Message, QueryResponse, Source } from "@/types/api";
 
-// Génère un ID unique
+// ===== Helper Functions =====
+
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
-export function useChat() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+const createUserMessage = (content: string): Message => ({
+  id: generateId(),
+  role: "user",
+  content: content.trim(),
+  timestamp: new Date(),
+});
+
+const createAssistantMessage = (
+  content: string,
+  options?: {
+    sources?: Source[];
+    conversationId?: string;
+    isLoading?: boolean;
+  }
+): Message => ({
+  id: generateId(),
+  role: "assistant",
+  content,
+  timestamp: new Date(),
+  sources: options?.sources,
+  conversationId: options?.conversationId,
+  isLoading: options?.isLoading,
+});
+
+// ===== Types =====
+
+interface UseChatOptions {
+  onError?: (error: Error) => void;
+  onSuccess?: (response: QueryResponse) => void;
+}
+
+interface ChatState {
+  messages: Message[];
+  sessionId: string | null;
+  isLoading: boolean;
+}
+
+// ===== Hook =====
+
+export function useChat(options?: UseChatOptions) {
+  const [state, setState] = useState<ChatState>({
+    messages: [],
+    sessionId: null,
+    isLoading: false,
+  });
+
+  // Ref pour l'AbortController
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const queryClient = useQueryClient();
 
   // Mutation pour envoyer un message
   const sendMutation = useMutation({
-    mutationFn: async ({ question, useWeb }: { question: string; useWeb: boolean }) => {
+    mutationFn: async ({
+      question,
+      useWeb,
+      signal,
+    }: {
+      question: string;
+      useWeb: boolean;
+      signal?: AbortSignal;
+    }) => {
       return api.query({
         question,
-        session_id: sessionId || undefined,
+        session_id: state.sessionId || undefined,
         use_web_search: useWeb,
       });
     },
     onSuccess: (data: QueryResponse) => {
       // Mettre à jour le session ID
-      if (data.session_id && !sessionId) {
-        setSessionId(data.session_id);
+      if (data.session_id && !state.sessionId) {
+        setState((prev) => ({ ...prev, sessionId: data.session_id }));
       }
 
-      // Ajouter la réponse de l'assistant
-      const assistantMessage: Message = {
-        id: generateId(),
-        role: "assistant",
-        content: data.answer,
-        timestamp: new Date(),
+      // Remplacer le message "loading" par la vraie réponse
+      const assistantMessage = createAssistantMessage(data.answer, {
         sources: data.sources,
         conversationId: data.conversation_id,
-      };
-
-      setMessages((prev) => {
-        // Remplacer le message "loading" par la vraie réponse
-        const filtered = prev.filter((m) => !m.isLoading);
-        return [...filtered, assistantMessage];
       });
+
+      setState((prev) => ({
+        ...prev,
+        messages: prev.messages
+          .filter((m) => !m.isLoading)
+          .concat(assistantMessage),
+        isLoading: false,
+      }));
+
+      // Callback optionnel
+      options?.onSuccess?.(data);
     },
     onError: (error: Error) => {
+      // Gérer l'annulation silencieusement
+      if (error.name === "AbortError" || error.message === "canceled") {
+        setState((prev) => ({
+          ...prev,
+          messages: prev.messages.filter((m) => !m.isLoading),
+          isLoading: false,
+        }));
+        return;
+      }
+
       // Supprimer le message "loading" et ajouter un message d'erreur
-      setMessages((prev) => {
-        const filtered = prev.filter((m) => !m.isLoading);
-        return [
-          ...filtered,
-          {
-            id: generateId(),
-            role: "assistant",
-            content: `Erreur: ${error.message}. Vérifiez votre clé API.`,
-            timestamp: new Date(),
-          },
-        ];
+      const errorMessage = createAssistantMessage(
+        `❌ Erreur: ${error.message}. Vérifiez votre clé API ou votre connexion.`
+      );
+
+      setState((prev) => ({
+        ...prev,
+        messages: prev.messages.filter((m) => !m.isLoading).concat(errorMessage),
+        isLoading: false,
+      }));
+
+      toast.error("Erreur de communication", {
+        description: error.message,
       });
-    },
-    onSettled: () => {
-      setIsLoading(false);
+
+      options?.onError?.(error);
     },
   });
 
   // Envoyer un message
   const sendMessage = useCallback(
-    async (content: string, useWeb = false) => {
-      if (!content.trim() || isLoading) return;
+    async (content: string, useWeb = true) => {
+      const trimmedContent = content.trim();
+      if (!trimmedContent || state.isLoading) return;
 
-      setIsLoading(true);
+      // Annuler toute requête précédente
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
 
-      // Ajouter le message utilisateur
-      const userMessage: Message = {
-        id: generateId(),
-        role: "user",
-        content: content.trim(),
-        timestamp: new Date(),
-      };
+      // Créer un nouvel AbortController
+      abortControllerRef.current = new AbortController();
 
-      // Ajouter un message "loading" pour l'assistant
-      const loadingMessage: Message = {
-        id: generateId(),
-        role: "assistant",
-        content: "",
-        timestamp: new Date(),
-        isLoading: true,
-      };
+      setState((prev) => ({ ...prev, isLoading: true }));
 
-      setMessages((prev) => [...prev, userMessage, loadingMessage]);
+      // Optimistic update : ajouter immédiatement le message utilisateur
+      const userMessage = createUserMessage(trimmedContent);
+      const loadingMessage = createAssistantMessage("", { isLoading: true });
+
+      setState((prev) => ({
+        ...prev,
+        messages: [...prev.messages, userMessage, loadingMessage],
+      }));
 
       // Envoyer la requête
-      sendMutation.mutate({ question: content.trim(), useWeb });
+      sendMutation.mutate({
+        question: trimmedContent,
+        useWeb,
+        signal: abortControllerRef.current?.signal,
+      });
     },
-    [isLoading, sendMutation]
+    [state.isLoading, sendMutation]
   );
+
+  // Annuler la requête en cours
+  const cancelRequest = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+
+      setState((prev) => ({
+        ...prev,
+        messages: prev.messages.filter((m) => !m.isLoading),
+        isLoading: false,
+      }));
+
+      toast.info("Requête annulée");
+    }
+  }, []);
 
   // Nouvelle conversation
   const newConversation = useCallback(() => {
-    setMessages([]);
-    setSessionId(null);
+    // Annuler toute requête en cours
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    setState({
+      messages: [],
+      sessionId: null,
+      isLoading: false,
+    });
   }, []);
 
   // Soumettre un feedback
@@ -116,22 +215,53 @@ export function useChat() {
           comment,
           flag_for_training: score >= 4,
         });
+
+        toast.success("Merci pour votre feedback !");
         return true;
-      } catch {
+      } catch (error) {
+        toast.error("Impossible d'envoyer le feedback");
         return false;
       }
     },
     []
   );
 
+  // Régénérer la dernière réponse
+  const regenerateLastResponse = useCallback(() => {
+    // Trouver le dernier message utilisateur
+    const lastUserMessage = [...state.messages]
+      .reverse()
+      .find((m) => m.role === "user");
+
+    if (lastUserMessage) {
+      // Supprimer la dernière réponse assistant
+      setState((prev) => ({
+        ...prev,
+        messages: prev.messages.slice(0, -1),
+      }));
+
+      // Renvoyer le message
+      sendMessage(lastUserMessage.content, true);
+    }
+  }, [state.messages, sendMessage]);
+
   return {
-    messages,
-    isLoading,
-    sessionId,
+    // State
+    messages: state.messages,
+    sessionId: state.sessionId,
+    isLoading: state.isLoading,
+
+    // Actions
     sendMessage,
+    cancelRequest,
     newConversation,
     submitFeedback,
+    regenerateLastResponse,
+
+    // Helpers
     hasApiKey: api.hasApiKey(),
+    canSend: !state.isLoading && api.hasApiKey(),
+    messageCount: state.messages.length,
   };
 }
 

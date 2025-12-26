@@ -9,7 +9,6 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
 import { Save, Eye, EyeOff, Loader2, Key, Server, Shield, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { LoadingSpinner } from "@/components/ui/states";
+import { useApiHealth } from "@/hooks";
 import { api } from "@/lib/api";
 import { apiKeySchema, type ApiKeyFormData } from "@/lib/validations";
 
@@ -227,15 +227,7 @@ export default function SettingsPage() {
 // ===== API Status Component =====
 
 function ApiStatus() {
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ["api-health"],
-    queryFn: async () => {
-      const health = await api.healthCheck();
-      return health;
-    },
-    refetchInterval: 30000, // Rafraîchir toutes les 30 secondes
-    retry: 1,
-  });
+  const { data, isLoading, isError, refetch, isFetching } = useApiHealth();
 
   const status = isLoading
     ? "loading"
@@ -290,3 +282,4 @@ function ApiStatus() {
     </div>
   );
 }
+
