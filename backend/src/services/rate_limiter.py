@@ -86,6 +86,23 @@ class RateLimiter:
             logger.error("Rate limiter error", error=str(e))
             return True, 0, 0
 
+    async def check_reflection_limit(
+        self, 
+        user_id: str,
+    ) -> Tuple[bool, int, int]:
+        """
+        Limite spécifique pour le mode réflexion (très coûteux).
+        Par défaut: 5 réflexions par minute.
+        """
+        limit = getattr(self.settings, 'rate_limit_reflection', 5)
+        window = 60 # 1 minute
+        
+        return await self.is_allowed(
+            f"reflection:{user_id}", 
+            limit=limit, 
+            window=window
+        )
+
 # Singleton
 _rate_limiter: Optional[RateLimiter] = None
 

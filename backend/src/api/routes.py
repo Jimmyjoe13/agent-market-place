@@ -16,9 +16,10 @@ Scopes requis par endpoint:
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 
 from src.api.auth import require_api_key, require_scope, require_any_scope
+from src.services.rate_limiter import get_rate_limiter
 from src.api.schemas import (
     QueryRequest,
     QueryResponse,
@@ -114,6 +115,22 @@ async def query_rag(
     - Si une réflexion approfondie est nécessaire
     """
     try:
+        # 1. Rate limiting pour le mode réflexion (si activé)
+        if request.enable_reflection:
+            limiter = get_rate_limiter()
+            allowed, count, retry_after = await limiter.check_reflection_limit(
+                str(api_key.user_id) if api_key.user_id else str(api_key.id)
+            )
+            if not allowed:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail={
+                        "error": "REFLECTION_LIMIT_EXCEEDED",
+                        "message": f"Limite de réflexion atteinte. Réessayez dans {retry_after}s.",
+                        "retry_after": retry_after
+                    }
+                )
+
         rag = get_rag_engine()
         
         # Utiliser la session existante si fournie
@@ -223,6 +240,21 @@ async def query_rag_stream(
     
     async def generate_events():
         try:
+            # 1. Rate limiting pour le mode réflexion (si activé)
+            if request.enable_reflection:
+                limiter = get_rate_limiter()
+                allowed, count, retry_after = await limiter.check_reflection_limit(
+                    str(api_key.user_id) if api_key.user_id else str(api_key.id)
+                )
+                if not allowed:
+                    error_data = json.dumps({
+                        "error": "REFLECTION_LIMIT_EXCEEDED",
+                        "message": f"Limite de réflexion atteinte. Réessayez dans {retry_after}s.",
+                        "retry_after": retry_after
+                    })
+                    yield f"event: error\ndata: {error_data}\n\n"
+                    return
+
             rag = get_rag_engine()
             
             if request.session_id:
