@@ -1,57 +1,70 @@
 /**
  * Page des paramètres - Configuration de la clé API
- * Utilise sonner pour les notifications et React Query pour le status API
+ * Utilise React Hook Form + Zod pour la validation
+ * et sonner pour les notifications
  */
 
 "use client";
 
 import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
-import { Save, Eye, EyeOff, Loader2, Key, Server, Shield } from "lucide-react";
+import { Save, Eye, EyeOff, Loader2, Key, Server, Shield, Trash2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { LoadingSpinner } from "@/components/ui/states";
 import { api } from "@/lib/api";
+import { apiKeySchema, type ApiKeyFormData } from "@/lib/validations";
 
 export default function SettingsPage() {
-  const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [savedKey, setSavedKey] = useState<string | null>(null);
+
+  const form = useForm<ApiKeyFormData>({
+    resolver: zodResolver(apiKeySchema),
+    defaultValues: {
+      key: "",
+    },
+    mode: "onChange", // Validation en temps réel
+  });
+
+  const { isSubmitting } = form.formState;
 
   // Charger la clé stockée au montage
   useEffect(() => {
     const stored = api.getStoredApiKey();
     if (stored) {
       setSavedKey(stored);
-      setApiKey(stored);
+      form.setValue("key", stored);
     }
-  }, []);
+  }, [form]);
 
-  const handleSave = async () => {
-    if (!apiKey.trim()) {
-      toast.warning("Clé requise", {
-        description: "Veuillez entrer une clé API valide.",
-      });
-      return;
-    }
-
-    setIsSaving(true);
+  async function onSubmit(values: ApiKeyFormData) {
     const toastId = toast.loading("Vérification de la clé...");
-    
+
     try {
-      api.setApiKey(apiKey.trim());
+      api.setApiKey(values.key);
       const health = await api.healthCheck();
-      
+
       if (health.status === "healthy") {
         toast.success("Clé API configurée", {
           id: toastId,
           description: "Connexion établie avec le backend.",
         });
-        setSavedKey(apiKey.trim());
+        setSavedKey(values.key);
       } else {
         throw new Error("Backend non disponible");
       }
@@ -61,14 +74,12 @@ export default function SettingsPage() {
         id: toastId,
         description: "Impossible de se connecter. Vérifiez votre clé API.",
       });
-    } finally {
-      setIsSaving(false);
     }
-  };
+  }
 
   const handleClear = () => {
     api.clearApiKey();
-    setApiKey("");
+    form.reset({ key: "" });
     setSavedKey(null);
     toast.info("Clé supprimée", {
       description: "Votre clé API a été supprimée du stockage local.",
@@ -108,56 +119,81 @@ export default function SettingsPage() {
               Vous pouvez obtenir une clé auprès de l&apos;administrateur.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="relative">
-              <Input
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="rag_xxxxxxxxxxxxxxxx"
-                className="bg-zinc-800 border-zinc-700 pr-10 focus:border-indigo-500"
-                disabled={isSaving}
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="absolute right-0 top-0 h-full px-3 text-zinc-400 hover:text-zinc-100"
-                onClick={() => setShowKey(!showKey)}
-                disabled={isSaving}
-              >
-                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-            </div>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="key"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Clé API *</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            type={showKey ? "text" : "password"}
+                            placeholder="rag_xxxxxxxxxxxxxxxx"
+                            className="bg-zinc-800 border-zinc-700 pr-10 focus:border-indigo-500"
+                            disabled={isSubmitting}
+                            {...field}
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="absolute right-0 top-0 h-full px-3 text-zinc-400 hover:text-zinc-100"
+                            onClick={() => setShowKey(!showKey)}
+                            disabled={isSubmitting}
+                            tabIndex={-1}
+                          >
+                            {showKey ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </FormControl>
+                      <FormDescription>
+                        La clé doit commencer par &quot;rag_&quot;
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <div className="flex gap-3">
-              <Button
-                onClick={handleSave}
-                disabled={!apiKey.trim() || isSaving}
-                className="gap-2 bg-indigo-600 hover:bg-indigo-500"
-              >
-                {isSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                {isSaving ? "Vérification..." : "Sauvegarder"}
-              </Button>
+                <div className="flex gap-3">
+                  <Button
+                    type="submit"
+                    disabled={!form.formState.isValid || isSubmitting}
+                    className="gap-2 bg-indigo-600 hover:bg-indigo-500"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    {isSubmitting ? "Vérification..." : "Sauvegarder"}
+                  </Button>
 
-              {savedKey && (
-                <Button
-                  variant="outline"
-                  onClick={handleClear}
-                  disabled={isSaving}
-                  className="border-zinc-700 hover:bg-zinc-800"
-                >
-                  Supprimer
-                </Button>
-              )}
-            </div>
+                  {savedKey && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleClear}
+                      disabled={isSubmitting}
+                      className="gap-2 border-zinc-700 hover:bg-zinc-800 hover:text-red-400"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Supprimer
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </Form>
 
             {/* Help text */}
-            <div className="rounded-lg bg-zinc-800/50 p-4 text-sm text-zinc-400">
+            <div className="mt-6 rounded-lg bg-zinc-800/50 p-4 text-sm text-zinc-400">
               <p className="mb-2 font-medium text-zinc-300">Comment obtenir une clé API ?</p>
               <ol className="list-inside list-decimal space-y-1">
                 <li>Contactez l&apos;administrateur du système</li>
@@ -188,9 +224,10 @@ export default function SettingsPage() {
   );
 }
 
-// Composant pour l'état de l'API avec React Query
+// ===== API Status Component =====
+
 function ApiStatus() {
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["api-health"],
     queryFn: async () => {
       const health = await api.healthCheck();
@@ -200,14 +237,20 @@ function ApiStatus() {
     retry: 1,
   });
 
-  const status = isLoading ? "loading" : isError ? "offline" : data?.status === "healthy" ? "online" : "offline";
+  const status = isLoading
+    ? "loading"
+    : isError
+    ? "offline"
+    : data?.status === "healthy"
+    ? "online"
+    : "offline";
 
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <div
-            className={`h-3 w-3 rounded-full ${
+            className={`h-3 w-3 rounded-full transition-all ${
               status === "loading"
                 ? "animate-pulse bg-zinc-500"
                 : status === "online"
@@ -229,15 +272,20 @@ function ApiStatus() {
           </Badge>
         )}
       </div>
-      
+
       <Button
         size="sm"
         variant="ghost"
         onClick={() => refetch()}
-        disabled={isLoading}
-        className="text-zinc-400 hover:text-zinc-100"
+        disabled={isLoading || isFetching}
+        className="gap-2 text-zinc-400 hover:text-zinc-100"
       >
-        {isLoading ? <LoadingSpinner size="sm" /> : "Actualiser"}
+        {isFetching ? (
+          <LoadingSpinner size="sm" />
+        ) : (
+          <RefreshCw className="h-4 w-4" />
+        )}
+        Actualiser
       </Button>
     </div>
   );
