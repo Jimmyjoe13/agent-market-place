@@ -223,20 +223,36 @@ def create_app() -> FastAPI:
     cors_origins_str = settings.cors_origins or ""
     cors_origins = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
     
+    # URLs de production connues (toujours autorisées)
+    production_origins = [
+        "https://rag-agentia.netlify.app",
+        "https://agent-ia-augment.onrender.com",
+    ]
+    
+    # Ajouter les origines de production
+    for origin in production_origins:
+        if origin not in cors_origins:
+            cors_origins.append(origin)
+    
     # Ajouter les origines de développement
     if settings.is_development:
-        cors_origins.extend([
+        dev_origins = [
             "http://localhost:3000",
             "http://127.0.0.1:3000",
-        ])
+            "http://localhost:8000",
+        ]
+        for origin in dev_origins:
+            if origin not in cors_origins:
+                cors_origins.append(origin)
     
-    # Si aucune origine n'est configurée, autoriser toutes les origines (à éviter en prod)
-    allow_all_origins = len(cors_origins) == 0
+    # Logging des origines CORS
+    logger = get_logger("cors")
+    logger.info("CORS origins configured", origins=cors_origins)
     
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if allow_all_origins else cors_origins,
-        allow_credentials=not allow_all_origins,  # Pas de credentials avec wildcard
+        allow_origins=cors_origins,
+        allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
         expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],

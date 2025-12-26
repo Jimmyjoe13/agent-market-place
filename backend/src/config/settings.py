@@ -157,7 +157,7 @@ class Settings(BaseSettings):
     
     # ===== CORS Settings =====
     cors_origins: str = Field(
-        default="http://localhost:3000",
+        default="http://localhost:3000,https://rag-agentia.netlify.app",
         description="Origines CORS autorisées (séparées par des virgules)",
     )
     
