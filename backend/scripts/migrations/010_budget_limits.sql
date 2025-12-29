@@ -224,14 +224,14 @@ SELECT
     ak.max_monthly_tokens,
     CASE 
         WHEN ak.max_monthly_tokens > 0 
-        THEN ROUND((ak.tokens_used_this_month::FLOAT / ak.max_monthly_tokens::FLOAT) * 100, 2)
+        THEN ROUND((ak.tokens_used_this_month::NUMERIC / ak.max_monthly_tokens::NUMERIC) * 100, 2)
         ELSE 0
     END as token_usage_percent,
     ak.requests_today,
     ak.max_daily_requests,
     CASE 
         WHEN ak.max_daily_requests > 0 
-        THEN ROUND((ak.requests_today::FLOAT / ak.max_daily_requests::FLOAT) * 100, 2)
+        THEN ROUND((ak.requests_today::NUMERIC / ak.max_daily_requests::NUMERIC) * 100, 2)
         ELSE 0
     END as daily_request_percent,
     ak.usage_reset_month,
