@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from src.api.auth import require_scope, ApiKeyValidation
 from src.config.logging_config import get_logger
-from src.config.database import get_supabase_client
+from src.repositories.base import BaseRepository
 from src.services.document_processor import (
     get_document_processor,
     JobStatus,
@@ -25,6 +25,37 @@ from src.services.document_processor import (
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/jobs", tags=["Document Jobs"])
+
+
+# ============================================
+# Simple Repository for document_jobs
+# ============================================
+
+class DocumentJobRepository:
+    """Repository simple pour les jobs de documents."""
+    
+    def __init__(self):
+        from src.config.settings import get_settings
+        from supabase import create_client
+        
+        settings = get_settings()
+        self._client = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
+    
+    @property
+    def client(self):
+        return self._client
+    
+    @property
+    def table(self):
+        return self._client.table("document_jobs")
+
+
+def get_job_repo() -> DocumentJobRepository:
+    """Factory pour le repository."""
+    return DocumentJobRepository()
 
 
 # ============================================
@@ -191,6 +222,7 @@ async def create_ingest_job_from_file(
 async def get_job_status(
     job_id: str,
     api_key: ApiKeyValidation = Depends(require_scope("query")),
+    repo: DocumentJobRepository = Depends(get_job_repo),
 ):
     """
     Récupère le statut d'un job d'ingestion.
@@ -216,8 +248,7 @@ async def get_job_status(
             )
         
         # Sinon chercher en DB
-        supabase = await get_supabase_client()
-        result = await supabase.table("document_jobs").select("*").eq(
+        result = repo.table.select("*").eq(
             "id", job_id
         ).eq(
             "api_key_id", str(api_key.api_key_id)
@@ -253,6 +284,7 @@ async def list_jobs(
     limit: int = 20,
     offset: int = 0,
     api_key: ApiKeyValidation = Depends(require_scope("query")),
+    repo: DocumentJobRepository = Depends(get_job_repo),
 ):
     """
     Liste les jobs d'ingestion de l'agent.
@@ -261,9 +293,7 @@ async def list_jobs(
     - status: pending, processing, completed, failed
     """
     try:
-        supabase = await get_supabase_client()
-        
-        query = supabase.table("document_jobs").select(
+        query = repo.table.select(
             "*", count="exact"
         ).eq(
             "api_key_id", str(api_key.api_key_id)
@@ -274,7 +304,7 @@ async def list_jobs(
         
         query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
         
-        result = await query.execute()
+        result = query.execute()
         
         jobs = [
             JobStatusResponse(
@@ -306,6 +336,7 @@ async def list_jobs(
 async def cancel_job(
     job_id: str,
     api_key: ApiKeyValidation = Depends(require_scope("ingest")),
+    repo: DocumentJobRepository = Depends(get_job_repo),
 ):
     """
     Annule un job en attente ou en cours.
@@ -313,10 +344,8 @@ async def cancel_job(
     Note: Les chunks déjà traités ne seront pas supprimés.
     """
     try:
-        supabase = await get_supabase_client()
-        
         # Mettre à jour le statut
-        result = await supabase.table("document_jobs").update({
+        result = repo.table.update({
             "status": "cancelled"
         }).eq(
             "id", job_id

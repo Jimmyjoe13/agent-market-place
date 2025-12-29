@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from src.api.auth import require_scope, ApiKeyValidation
 from src.config.logging_config import get_logger
-from src.config.database import get_supabase_client
+from src.repositories.api_key_repository import ApiKeyRepository
 from src.services.rate_limiter import get_rate_limiter
 
 logger = get_logger(__name__)
@@ -84,6 +84,15 @@ class UsageStatsResponse(BaseModel):
 
 
 # ============================================
+# Dependencies
+# ============================================
+
+def get_key_repo() -> ApiKeyRepository:
+    """Retourne une instance du repository."""
+    return ApiKeyRepository()
+
+
+# ============================================
 # Helper Functions
 # ============================================
 
@@ -107,6 +116,7 @@ def hash_api_key(key: str) -> str:
 async def rotate_api_key(
     key_id: str,
     api_key: ApiKeyValidation = Depends(require_scope("admin")),
+    repo: ApiKeyRepository = Depends(get_key_repo),
 ):
     """
     Régénère une clé API sans perdre la configuration ni les documents.
@@ -119,16 +129,10 @@ async def rotate_api_key(
     ⚠️ La nouvelle clé ne sera affichée qu'une seule fois.
     """
     try:
-        supabase = await get_supabase_client()
-        
         # Vérifier que la clé appartient à l'utilisateur
-        result = await supabase.table("api_keys").select("*").eq(
-            "id", key_id
-        ).eq(
-            "user_id", str(api_key.user_id)
-        ).single().execute()
+        key_data = repo.get_by_id(key_id)
         
-        if not result.data:
+        if not key_data or str(key_data.get("user_id")) != str(api_key.user_id):
             raise HTTPException(
                 status_code=404,
                 detail="Clé API non trouvée ou accès non autorisé"
@@ -139,7 +143,7 @@ async def rotate_api_key(
         new_hash = hash_api_key(new_key)
         
         # Mettre à jour le hash (garde le même ID!)
-        await supabase.table("api_keys").update({
+        repo.client.table("api_keys").update({
             "key_hash": new_hash,
             "last_rotated_at": datetime.utcnow().isoformat(),
         }).eq("id", key_id).execute()
@@ -170,39 +174,41 @@ async def rotate_api_key(
 async def get_budget_limits(
     key_id: str,
     api_key: ApiKeyValidation = Depends(require_scope("query")),
+    repo: ApiKeyRepository = Depends(get_key_repo),
 ):
     """
     Récupère les limites de budget et l'utilisation actuelle.
     """
     try:
-        supabase = await get_supabase_client()
-        
-        result = await supabase.table("api_keys").select(
+        result = repo.client.table("api_keys").select(
             "max_monthly_tokens",
             "max_daily_requests",
             "tokens_used_this_month",
             "requests_today",
-            "system_prompt_max_length"
-        ).eq("id", key_id).eq(
-            "user_id", str(api_key.user_id)
-        ).single().execute()
+            "system_prompt_max_length",
+            "user_id"
+        ).eq("id", key_id).single().execute()
         
         if not result.data:
             raise HTTPException(status_code=404, detail="Clé non trouvée")
         
         data = result.data
         
+        # Vérifier la propriété
+        if str(data.get("user_id")) != str(api_key.user_id):
+            raise HTTPException(status_code=404, detail="Clé non trouvée")
+        
         # Calcul du pourcentage d'utilisation
-        max_tokens = data.get("max_monthly_tokens", 0) or 0
-        used_tokens = data.get("tokens_used_this_month", 0) or 0
+        max_tokens = data.get("max_monthly_tokens") or 0
+        used_tokens = data.get("tokens_used_this_month") or 0
         usage_percent = (used_tokens / max_tokens * 100) if max_tokens > 0 else 0
         
         return BudgetLimitsResponse(
             max_monthly_tokens=max_tokens,
-            max_daily_requests=data.get("max_daily_requests", 0) or 0,
+            max_daily_requests=data.get("max_daily_requests") or 0,
             tokens_used_this_month=used_tokens,
-            requests_today=data.get("requests_today", 0) or 0,
-            system_prompt_max_length=data.get("system_prompt_max_length", 4000) or 4000,
+            requests_today=data.get("requests_today") or 0,
+            system_prompt_max_length=data.get("system_prompt_max_length") or 4000,
             usage_percent=round(usage_percent, 2)
         )
         
@@ -218,6 +224,7 @@ async def update_budget_limits(
     key_id: str,
     limits: BudgetLimitsUpdate,
     api_key: ApiKeyValidation = Depends(require_scope("admin")),
+    repo: ApiKeyRepository = Depends(get_key_repo),
 ):
     """
     Met à jour les limites de budget d'une clé API.
@@ -225,7 +232,10 @@ async def update_budget_limits(
     Seuls les champs fournis sont mis à jour.
     """
     try:
-        supabase = await get_supabase_client()
+        # Vérifier propriété
+        key_data = repo.get_by_id(key_id)
+        if not key_data or str(key_data.get("user_id")) != str(api_key.user_id):
+            raise HTTPException(status_code=404, detail="Clé non trouvée")
         
         # Construire les champs à mettre à jour
         update_data = {}
@@ -243,14 +253,10 @@ async def update_budget_limits(
             )
         
         # Mettre à jour
-        await supabase.table("api_keys").update(update_data).eq(
-            "id", key_id
-        ).eq(
-            "user_id", str(api_key.user_id)
-        ).execute()
+        repo.client.table("api_keys").update(update_data).eq("id", key_id).execute()
         
         # Retourner les nouvelles valeurs
-        return await get_budget_limits(key_id, api_key)
+        return await get_budget_limits(key_id, api_key, repo)
         
     except HTTPException:
         raise
@@ -263,6 +269,7 @@ async def update_budget_limits(
 async def get_usage_stats(
     key_id: str,
     api_key: ApiKeyValidation = Depends(require_scope("query")),
+    repo: ApiKeyRepository = Depends(get_key_repo),
 ):
     """
     Récupère les statistiques d'utilisation détaillées.
@@ -273,11 +280,10 @@ async def get_usage_stats(
     - Stats rate limiting en temps réel
     """
     try:
-        supabase = await get_supabase_client()
         rate_limiter = get_rate_limiter()
         
         # Données DB
-        result = await supabase.table("api_keys").select(
+        result = repo.client.table("api_keys").select(
             "id",
             "agent_name",
             "tokens_used_this_month",
@@ -285,15 +291,18 @@ async def get_usage_stats(
             "requests_today",
             "max_daily_requests",
             "usage_reset_month",
-            "daily_reset_date"
-        ).eq("id", key_id).eq(
-            "user_id", str(api_key.user_id)
-        ).single().execute()
+            "daily_reset_date",
+            "user_id"
+        ).eq("id", key_id).single().execute()
         
         if not result.data:
             raise HTTPException(status_code=404, detail="Clé non trouvée")
         
         data = result.data
+        
+        # Vérifier propriété
+        if str(data.get("user_id")) != str(api_key.user_id):
+            raise HTTPException(status_code=404, detail="Clé non trouvée")
         
         # Stats rate limiting temps réel
         rate_stats = await rate_limiter.get_usage_stats(key_id)
@@ -301,10 +310,10 @@ async def get_usage_stats(
         return UsageStatsResponse(
             key_id=key_id,
             agent_name=data.get("agent_name"),
-            tokens_used_this_month=data.get("tokens_used_this_month", 0) or 0,
-            max_monthly_tokens=data.get("max_monthly_tokens", 0) or 0,
-            requests_today=data.get("requests_today", 0) or 0,
-            max_daily_requests=data.get("max_daily_requests", 0) or 0,
+            tokens_used_this_month=data.get("tokens_used_this_month") or 0,
+            max_monthly_tokens=data.get("max_monthly_tokens") or 0,
+            requests_today=data.get("requests_today") or 0,
+            max_daily_requests=data.get("max_daily_requests") or 0,
             rate_limit_stats=rate_stats,
             usage_reset_month=data.get("usage_reset_month"),
             daily_reset_date=str(data.get("daily_reset_date")) if data.get("daily_reset_date") else None,
