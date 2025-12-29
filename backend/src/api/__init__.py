@@ -3,6 +3,8 @@
 from src.api.main import app, create_app
 from src.api.routes import router
 from src.api.routes_admin import admin_router
+from src.api.routes_keys import router as keys_router
+from src.api.routes_jobs import router as jobs_router
 from src.api.auth import (
     get_api_key,
     require_api_key,
@@ -27,6 +29,8 @@ __all__ = [
     # Routers
     "router",
     "admin_router",
+    "keys_router",
+    "jobs_router",
     # Authentication
     "get_api_key",
     "require_api_key",
@@ -42,3 +46,4 @@ __all__ = [
     "AnalyticsResponse",
     "HealthResponse",
 ]
+

@@ -30,3 +30,18 @@ export {
 // Rate Limiting
 export { useRateLimit } from "./useRateLimit";
 
+// Document Jobs
+export {
+  useCreateDocumentJob,
+  useDocumentJob,
+  useDocumentJobs,
+  useCancelDocumentJob,
+} from "./useDocumentJobs";
+
+// Budget & Key Management
+export {
+  useBudgetLimits,
+  useUpdateBudgetLimits,
+  useUsageStats,
+  useRotateKey,
+} from "./useBudgetLimits";

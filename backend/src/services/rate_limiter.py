@@ -102,6 +102,110 @@ class RateLimiter:
             limit=limit, 
             window=window
         )
+    
+    async def is_allowed_by_api_key(
+        self,
+        api_key_id: str,
+        operation_type: str = "query",
+        limit: Optional[int] = None,
+        window: int = 60
+    ) -> Tuple[bool, int, int]:
+        """
+        Rate limiting granulaire par api_key_id et type d'opération.
+        
+        Cette méthode permet un contrôle fin des limites par agent et par
+        type d'opération (query, ingest, reflection).
+        
+        Args:
+            api_key_id: ID de la clé API (agent).
+            operation_type: Type d'opération (query, ingest, reflection).
+            limit: Limite personnalisée (sinon défaut settings).
+            window: Fenêtre en secondes.
+            
+        Returns:
+            (allowed, current_count, retry_after)
+        """
+        # Limites par défaut selon le type d'opération
+        default_limits = {
+            "query": getattr(self.settings, 'rate_limit_requests', 60),
+            "ingest": getattr(self.settings, 'rate_limit_ingest', 20),
+            "reflection": getattr(self.settings, 'rate_limit_reflection', 5),
+        }
+        
+        effective_limit = limit if limit is not None else default_limits.get(
+            operation_type, 
+            self.settings.rate_limit_requests
+        )
+        
+        # Clé unique: rl:api:{api_key_id}:{operation}:{window}
+        key = f"api:{api_key_id}:{operation_type}"
+        
+        return await self.is_allowed(key, effective_limit, window)
+    
+    async def check_budget_limit(
+        self,
+        api_key_id: str,
+        tokens_to_use: int,
+    ) -> Tuple[bool, dict]:
+        """
+        Vérifie si l'utilisation de tokens est dans le budget.
+        
+        Combine rate limiting Redis et vérification budget DB.
+        
+        Args:
+            api_key_id: ID de la clé API.
+            tokens_to_use: Nombre de tokens à utiliser.
+            
+        Returns:
+            (allowed, budget_info)
+        """
+        # Rate limit par api_key d'abord
+        allowed, count, retry_after = await self.is_allowed_by_api_key(
+            api_key_id,
+            operation_type="query"
+        )
+        
+        if not allowed:
+            return False, {
+                "reason": "rate_limit_exceeded",
+                "current_count": count,
+                "retry_after": retry_after
+            }
+        
+        # La vérification du budget tokens se fait en DB via la fonction SQL
+        # check_token_budget() - à appeler séparément dans le middleware
+        return True, {"reason": "allowed"}
+    
+    async def get_usage_stats(
+        self,
+        api_key_id: str,
+    ) -> dict:
+        """
+        Récupère les statistiques d'utilisation d'une clé API.
+        
+        Args:
+            api_key_id: ID de la clé API.
+            
+        Returns:
+            Statistiques d'utilisation par type d'opération.
+        """
+        redis = await get_redis_client()
+        if not redis:
+            return {}
+        
+        current_time = int(time.time())
+        window_id = current_time // 60  # Fenêtre de 1 minute
+        
+        stats = {}
+        for op_type in ["query", "ingest", "reflection"]:
+            redis_key = f"rl:api:{api_key_id}:{op_type}:{window_id}"
+            try:
+                count = await redis.get(redis_key)
+                stats[op_type] = int(count) if count else 0
+            except Exception:
+                stats[op_type] = 0
+        
+        return stats
 
 # Singleton
 _rate_limiter: Optional[RateLimiter] = None

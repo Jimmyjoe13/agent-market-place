@@ -36,6 +36,8 @@ from src.api.routes_admin import admin_router
 from src.api.routes_auth import router as auth_router
 from src.api.routes_console import router as console_router
 from src.api.routes_agent import router as agent_router
+from src.api.routes_keys import router as keys_router
+from src.api.routes_jobs import router as jobs_router
 from src.api.schemas import HealthResponse, ErrorResponse, SourceResponse
 from src.api.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 from src.config.logging_config import setup_logging, get_logger
@@ -326,6 +328,12 @@ def create_app() -> FastAPI:
     
     # Inclure les routes de configuration agent
     app.include_router(agent_router)
+    
+    # Inclure les routes de gestion des clés
+    app.include_router(keys_router, prefix="/api/v1")
+    
+    # Inclure les routes des jobs de documents
+    app.include_router(jobs_router, prefix="/api/v1")
     
     # Route de santé à la racine (non protégée)
     @app.get(
