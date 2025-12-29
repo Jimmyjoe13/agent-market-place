@@ -215,6 +215,51 @@ class ApiClient {
     });
     return data;
   }
+
+  // ===== Agent Config Endpoints =====
+
+  async getAgentConfig(): Promise<{
+    agent_id: string;
+    config: {
+      model_id: string;
+      system_prompt: string | null;
+      rag_enabled: boolean;
+      agent_name: string | null;
+    };
+  }> {
+    const { data } = await this.client.get("/agent/config");
+    return data;
+  }
+
+  async updateAgentConfig(config: {
+    model_id?: string;
+    system_prompt?: string;
+    rag_enabled?: boolean;
+    agent_name?: string;
+  }): Promise<{
+    agent_id: string;
+    config: {
+      model_id: string;
+      system_prompt: string | null;
+      rag_enabled: boolean;
+      agent_name: string | null;
+    };
+  }> {
+    const { data } = await this.client.patch("/agent/config", config);
+    return data;
+  }
+
+  async getAvailableModels(): Promise<{
+    models: Array<{
+      id: string;
+      provider: string;
+      name: string;
+      recommended?: boolean;
+    }>;
+  }> {
+    const { data } = await this.client.get("/agent/available-models");
+    return data;
+  }
 }
 
 // ===== Export Singleton =====

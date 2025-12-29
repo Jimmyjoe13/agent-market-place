@@ -39,6 +39,49 @@ class ApiKeyScope(str, Enum):
     ADMIN = "admin"
 
 
+class AgentConfig(BaseModel):
+    """
+    Configuration de l'agent associé à une clé API.
+    
+    Chaque clé API représente un agent avec ses propres paramètres.
+    
+    Attributes:
+        model_id: Identifiant du modèle LLM (mistral-large-latest, gpt-4o, deepseek-chat).
+        system_prompt: Prompt système personnalisé (None = prompt par défaut).
+        rag_enabled: Active la recherche dans les documents vectorisés.
+        agent_name: Nom affiché de l'agent dans le dashboard.
+    """
+    
+    model_id: str = Field(
+        default="mistral-large-latest",
+        description="Identifiant du modèle LLM à utiliser",
+        examples=["mistral-large-latest", "gpt-4o", "deepseek-chat"],
+    )
+    system_prompt: str | None = Field(
+        default=None,
+        description="Prompt système personnalisé (null = défaut)",
+        max_length=10000,
+    )
+    rag_enabled: bool = Field(
+        default=True,
+        description="Active la recherche dans les documents",
+    )
+    agent_name: str | None = Field(
+        default=None,
+        description="Nom affiché de l'agent",
+        max_length=100,
+    )
+
+
+class AgentConfigUpdate(BaseModel):
+    """Mise à jour partielle de la configuration agent."""
+    
+    model_id: str | None = None
+    system_prompt: str | None = None
+    rag_enabled: bool | None = None
+    agent_name: str | None = None
+
+
 class ApiKeyCreate(BaseModel):
     """
     Schéma pour la création d'une nouvelle clé API.
@@ -95,6 +138,10 @@ class ApiKeyCreate(BaseModel):
         default_factory=dict,
         description="Métadonnées personnalisées (owner, team, etc.)",
         examples=[{"team": "backend", "environment": "production"}],
+    )
+    agent_config: AgentConfig = Field(
+        default_factory=AgentConfig,
+        description="Configuration de l'agent associé",
     )
     
     @field_validator("scopes")
@@ -167,6 +214,10 @@ class ApiKeyInfo(BaseModel):
     expires_at: datetime | None = Field(default=None)
     last_used_at: datetime | None = Field(default=None)
     created_at: datetime | None = Field(default=None, description="Date de création")
+    # Agent config fields
+    agent_model_id: str = Field(default="mistral-large-latest", description="Modèle LLM")
+    agent_name: str | None = Field(default=None, description="Nom de l'agent")
+    rag_enabled: bool = Field(default=True, description="RAG activé")
     model_config = {"from_attributes": True}
 
 
@@ -185,6 +236,11 @@ class ApiKeyValidation(BaseModel):
     rejection_reason: str | None = Field(
         default=None,
         description="Raison du rejet si invalide",
+    )
+    # Agent configuration (populated on validation)
+    agent_config: AgentConfig | None = Field(
+        default=None,
+        description="Configuration de l'agent si la clé est valide",
     )
 
 

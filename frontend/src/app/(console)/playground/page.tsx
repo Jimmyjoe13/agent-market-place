@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
 import { PlaygroundParameters } from "@/components/playground/parameters";
 import { CodePreview } from "@/components/playground/code-preview";
+import AgentConfigPanel from "@/components/playground/AgentConfigPanel";
 import type { Message } from "@/types/api";
 
 // Default parameters
@@ -221,6 +222,13 @@ export default function PlaygroundPage() {
             parameters={parameters}
             requestContent={input}
         />
+      </div>
+
+      {/* Agent Config Panel (Right) */}
+      <div className="hidden lg:block w-80 border-l border-white/5 bg-zinc-950/50 overflow-y-auto">
+        <div className="p-4">
+          <AgentConfigPanel />
+        </div>
       </div>
     </div>
   );

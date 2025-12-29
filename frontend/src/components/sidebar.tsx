@@ -39,6 +39,7 @@ const navItems = [
     href: "/playground",
     icon: Terminal,
     description: "Tester l'API en direct",
+    dataTour: "playground-link",
   },
   {
     title: "Dashboard",
@@ -63,6 +64,7 @@ const navItems = [
     href: "/docs",
     icon: BookOpen,
     description: "Documentation API",
+    dataTour: "docs-link",
   },
   {
     title: "Paramètres",
@@ -113,7 +115,7 @@ export function Sidebar() {
             return (
               <Tooltip key={item.href}>
                 <TooltipTrigger asChild>
-                  <Link href={item.href}>
+                  <Link href={item.href} data-tour={item.dataTour}>
                     <Button
                       size="icon"
                       variant="ghost"

@@ -35,6 +35,7 @@ from src.api.routes import router
 from src.api.routes_admin import admin_router
 from src.api.routes_auth import router as auth_router
 from src.api.routes_console import router as console_router
+from src.api.routes_agent import router as agent_router
 from src.api.schemas import HealthResponse, ErrorResponse, SourceResponse
 from src.api.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 from src.config.logging_config import setup_logging, get_logger
@@ -187,6 +188,10 @@ Les headers de réponse incluent :
             "description": "Gestion des clés API (création, révocation, statistiques)",
         },
         {
+            "name": "Agent Configuration",
+            "description": "Configuration de l'agent (modèle LLM, prompt système, RAG)",
+        },
+        {
             "name": "Health",
             "description": "État de santé de l'API",
         },
@@ -318,6 +323,9 @@ def create_app() -> FastAPI:
 
     # Inclure les routes de la console (self-service)
     app.include_router(console_router, prefix="/api/v1")
+    
+    # Inclure les routes de configuration agent
+    app.include_router(agent_router)
     
     # Route de santé à la racine (non protégée)
     @app.get(

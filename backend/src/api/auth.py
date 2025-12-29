@@ -186,12 +186,17 @@ async def get_api_key(
     request.state.rate_limit_max = limit_value
     request.state.rate_limit_retry_after = retry_after
     
+    # Accès direct à la configuration agent
+    if validation and validation.agent_config:
+        request.state.agent_config = validation.agent_config
+    
     if validation:
         logger.debug(
             "API key validated",
             key_id=str(validation.id),
             scopes=validation.scopes,
-            rate_count=count
+            rate_count=count,
+            model_id=validation.agent_config.model_id if validation.agent_config else None,
         )
     
     return validation

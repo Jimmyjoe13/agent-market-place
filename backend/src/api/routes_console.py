@@ -98,6 +98,7 @@ async def create_my_key(
             monthly_quota=request.monthly_quota,
             expires_in_days=request.expires_in_days,
             metadata=request.metadata,
+            agent_config=request.agent_config,
         )
         
         return ApiKeyResponse(

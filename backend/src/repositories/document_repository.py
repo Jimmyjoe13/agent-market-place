@@ -84,6 +84,7 @@ class DocumentRepository(BaseRepository[Document]):
         doc: DocumentCreate,
         embedding: list[float],
         user_id: str | None = None,
+        api_key_id: str | None = None,
     ) -> Document:
         """
         Crée un document à partir d'un modèle Pydantic.
@@ -92,6 +93,7 @@ class DocumentRepository(BaseRepository[Document]):
             doc: Modèle DocumentCreate.
             embedding: Vecteur d'embedding.
             user_id: ID de l'utilisateur (multi-tenant).
+            api_key_id: ID de la clé API/agent propriétaire.
             
         Returns:
             Document créé.
@@ -107,6 +109,9 @@ class DocumentRepository(BaseRepository[Document]):
         
         if user_id:
             data["user_id"] = user_id
+        
+        if api_key_id:
+            data["api_key_id"] = api_key_id
             
         return self.create(data)
     
@@ -117,6 +122,7 @@ class DocumentRepository(BaseRepository[Document]):
         limit: int = 10,
         source_type: SourceType | None = None,
         user_id: str | None = None,
+        api_key_id: str | None = None,
     ) -> list[DocumentMatch]:
         """
         Recherche par similarité cosinus.
@@ -126,7 +132,8 @@ class DocumentRepository(BaseRepository[Document]):
             threshold: Seuil de similarité minimum.
             limit: Nombre maximum de résultats.
             source_type: Filtrer par type de source.
-            user_id: Filtrer par utilisateur (multi-tenant).
+            user_id: Filtrer par utilisateur (multi-tenant, déprécié).
+            api_key_id: Filtrer par agent/clé API (isolation documents).
             
         Returns:
             Liste des documents correspondants avec score.
@@ -142,6 +149,9 @@ class DocumentRepository(BaseRepository[Document]):
             
             if user_id:
                 params["filter_user_id"] = user_id
+            
+            if api_key_id:
+                params["filter_api_key_id"] = api_key_id
             
             response = self.client.rpc("match_documents", params).execute()
             

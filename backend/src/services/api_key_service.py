@@ -31,6 +31,7 @@ from src.models.api_key import (
     ApiKeyResponse,
     ApiKeyScope,
     ApiKeyUsageStats,
+    AgentConfig,
 )
 from src.repositories.api_key_repository import ApiKeyRepository
 from src.repositories.subscription_repository import SubscriptionRepository
@@ -94,6 +95,7 @@ class ApiKeyService:
         monthly_quota: int = 0,
         expires_in_days: int | None = None,
         metadata: dict[str, Any] | None = None,
+        agent_config: AgentConfig | None = None,
     ) -> CreateKeyResult:
         """
         Crée une clé API pour un utilisateur avec vérification des quotas.
@@ -150,7 +152,7 @@ class ApiKeyService:
             )
         
         # 3. Créer la clé via repository
-        result = self._key_repo.create({
+        create_data = {
             "user_id": user_id,
             "name": name,
             "scopes": safe_scopes,
@@ -158,7 +160,13 @@ class ApiKeyService:
             "monthly_quota": monthly_quota,
             "expires_in_days": expires_in_days,
             "metadata": metadata or {},
-        })
+        }
+        
+        # Ajouter agent_config si fourni
+        if agent_config:
+            create_data["agent_config"] = agent_config.model_dump()
+        
+        result = self._key_repo.create(create_data)
         
         logger.info(
             "API key created for user",
@@ -181,6 +189,10 @@ class ApiKeyService:
             expires_at=result.get("expires_at"),
             last_used_at=result.get("last_used_at"),
             created_at=result.get("created_at"),
+            # Agent config fields
+            agent_model_id=result.get("agent_model_id", "mistral-large-latest"),
+            agent_name=result.get("agent_name"),
+            rag_enabled=result.get("rag_enabled", True),
         )
         
         return CreateKeyResult(
@@ -292,14 +304,20 @@ class ApiKeyService:
         if validation is None:
             return None
         
-        return {
-            "id": str(validation.id),
+        result = {
+            "id": str(validation.id) if validation.id else None,
             "user_id": str(validation.user_id) if validation.user_id else None,
             "scopes": validation.scopes,
             "rate_limit": validation.rate_limit,
             "is_valid": validation.is_valid,
             "rejection_reason": validation.rejection_reason,
         }
+        
+        # Ajouter agent_config si disponible
+        if validation.agent_config:
+            result["agent_config"] = validation.agent_config
+        
+        return result
 
 
 # ===== Singleton pour injection =====

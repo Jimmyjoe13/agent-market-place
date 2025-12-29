@@ -137,13 +137,28 @@ async def query_rag(
         if request.session_id:
             rag._session_id = request.session_id
         
+        # Extraire la config agent (si présente)
+        agent_config = api_key.agent_config
+        
+        # Déterminer le system_prompt (priorité: request > agent_config > default)
+        effective_system_prompt = request.system_prompt
+        if not effective_system_prompt and agent_config and agent_config.system_prompt:
+            effective_system_prompt = agent_config.system_prompt
+        
+        # Déterminer si RAG est activé (agent_config peut le désactiver)
+        use_rag = request.use_rag
+        if agent_config and not agent_config.rag_enabled:
+            use_rag = False
+        
         response = await rag.query_async(
             question=request.question,
-            system_prompt=request.system_prompt,
+            system_prompt=effective_system_prompt,
             use_web=request.use_web_search,
-            use_rag=request.use_rag,
+            use_rag=use_rag,
             enable_reflection=request.enable_reflection,
             user_id=str(api_key.user_id) if api_key.user_id else None,
+            api_key_id=str(api_key.id) if api_key.id else None,  # Pour isolation documents
+            model_id=agent_config.model_id if agent_config else None,  # Modèle LLM agent
         )
         
         # Convertir les sources

@@ -14,6 +14,8 @@ from src.models.api_key import (
     ApiKeyInfo,
     ApiKeyValidation,
     ApiKeyUsageStats,
+    AgentConfig,
+    AgentConfigUpdate,
 )
 from src.models.user import (
     UserRole,
@@ -52,6 +54,8 @@ __all__ = [
     "ApiKeyInfo",
     "ApiKeyValidation",
     "ApiKeyUsageStats",
+    "AgentConfig",
+    "AgentConfigUpdate",
     # User models
     "UserRole",
     "OAuthProvider",

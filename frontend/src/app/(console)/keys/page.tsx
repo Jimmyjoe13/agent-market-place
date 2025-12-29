@@ -72,7 +72,9 @@ export default function KeysPage() {
         </Card>
 
         {/* API Key Manager */}
-        <ApiKeyManager />
+        <div data-tour="api-keys">
+          <ApiKeyManager />
+        </div>
 
         {/* Usage Example */}
         <Card className="mt-6 border-zinc-800 bg-zinc-900/50">

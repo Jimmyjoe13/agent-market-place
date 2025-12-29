@@ -63,6 +63,12 @@ class LLMProviderFactory:
             _PROVIDER_REGISTRY[LLMProvider.GEMINI] = GeminiLLMProvider
         except ImportError:
             logger.debug("Gemini provider not available")
+        
+        try:
+            from .deepseek_provider import DeepseekLLMProvider
+            _PROVIDER_REGISTRY[LLMProvider.DEEPSEEK] = DeepseekLLMProvider
+        except ImportError:
+            logger.debug("Deepseek provider not available")
     
     @property
     def available_providers(self) -> list[LLMProvider]:

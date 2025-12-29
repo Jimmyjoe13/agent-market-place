@@ -220,3 +220,161 @@ Events émis :
 - **Hallucinations du Routeur** : Le bouton "Mes documents" permet de forcer le RAG
 - **Coût Mode Réflexion** : Consomme ~2x plus de tokens
 - **Feedback Loop** : Le logging est asynchrone (Background Task prévu)
+
+---
+
+## 🤖 Agent Marketplace v1 (Nouvelle fonctionnalité)
+
+### Concept
+
+Chaque clé API devient un **agent configurable** avec :
+
+- **Modèle LLM** personnalisé (Mistral, OpenAI, Deepseek)
+- **Prompt système** dédié
+- **Documents RAG** isolés
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       API Key = Agent                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Configuration Agent (stockée en DB) :                       │
+│  ├── model_id: "deepseek-chat" | "gpt-4o" | "mistral-large" │
+│  ├── system_prompt: "Tu es un expert en..."                 │
+│  ├── rag_enabled: true/false                                │
+│  └── agent_name: "Mon Assistant"                            │
+│                                                              │
+│  Isolation Documents :                                       │
+│  └── documents.api_key_id → FK vers api_keys.id             │
+│      (ON DELETE CASCADE)                                     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Nouveaux Fichiers
+
+#### Backend
+
+```
+backend/scripts/migrations/
+└── 008_agent_config.sql        # Extension schema api_keys + documents
+
+backend/src/providers/llm/
+└── deepseek_provider.py        # Provider Deepseek (API OpenAI-compatible)
+
+backend/src/api/
+└── routes_agent.py             # GET/PATCH /api/v1/agent/config
+```
+
+#### Frontend
+
+```
+frontend/src/hooks/
+└── useAgentConfig.ts           # Hooks React Query
+
+frontend/src/components/
+├── playground/
+│   └── AgentConfigPanel.tsx    # Panneau de configuration
+└── onboarding/
+    └── OnboardingTour.tsx      # Tour interactif react-joyride
+```
+
+### Nouveaux Endpoints API
+
+| Endpoint                         | Méthode | Description                        |
+| -------------------------------- | ------- | ---------------------------------- |
+| `/api/v1/agent/config`           | GET     | Récupérer la config de l'agent     |
+| `/api/v1/agent/config`           | PATCH   | Mettre à jour (model, prompt, rag) |
+| `/api/v1/agent/available-models` | GET     | Liste des modèles disponibles      |
+
+### Migration Database
+
+```sql
+-- Extension api_keys
+ALTER TABLE api_keys ADD COLUMN model_id VARCHAR(100) DEFAULT 'mistral-large-latest';
+ALTER TABLE api_keys ADD COLUMN system_prompt TEXT;
+ALTER TABLE api_keys ADD COLUMN rag_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE api_keys ADD COLUMN agent_name VARCHAR(200);
+
+-- Isolation documents par agent
+ALTER TABLE documents ADD COLUMN api_key_id UUID REFERENCES api_keys(id) ON DELETE CASCADE;
+CREATE INDEX idx_documents_api_key ON documents(api_key_id);
+
+-- validate_api_key retourne maintenant la config agent
+```
+
+### Flow Complet
+
+```
+1. Utilisateur crée une clé API (avec agent_config optionnel)
+   → POST /api/v1/console/keys { agent_config: { model_id: "deepseek-chat" } }
+   → Clé + config stockées en DB
+
+2. Playground charge la config
+   → GET /api/v1/agent/config (auth via Bearer token)
+   → Affiche dans AgentConfigPanel
+
+3. Utilisateur modifie la config
+   → PATCH /api/v1/agent/config { model_id: "gpt-4o" }
+   → Sauvegarde en DB
+
+4. Appel API externe
+   → POST /api/v1/query avec X-API-Key
+   → Middleware injecte agent_config dans request.state
+   → RAG Engine utilise model_id + system_prompt + api_key_id
+```
+
+### Onboarding Interactif
+
+- **Démarrage automatique** au premier login (localStorage)
+- **6 étapes** guidées :
+  1. Bienvenue
+  2. Gestion des clés API
+  3. Création d'agent
+  4. Playground
+  5. Documentation
+  6. Conclusion
+- **Persistance** : `localStorage.rag_onboarding_completed`
+
+### Modèles LLM Supportés
+
+| Provider     | Modèles                                             | Notes                 |
+| ------------ | --------------------------------------------------- | --------------------- |
+| **Mistral**  | mistral-large-latest, mistral-medium, mistral-small | Par défaut            |
+| **OpenAI**   | gpt-4o, gpt-4o-mini, gpt-4-turbo                    | Nécessite clé         |
+| **Deepseek** | deepseek-chat, deepseek-coder, deepseek-reasoner    | API OpenAI-compatible |
+
+---
+
+## 🚀 Déploiement
+
+### 1. Appliquer la migration
+
+```bash
+# Via Supabase CLI
+supabase migration apply --local
+
+# Ou directement sur Supabase Studio
+# Coller le contenu de 008_agent_config.sql
+```
+
+### 2. Variables d'environnement
+
+```env
+# Nouveau provider
+DEEPSEEK_API_KEY=sk-...
+
+# Existants (rappel)
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=AI...
+```
+
+### 3. Frontend
+
+```bash
+cd frontend
+npm install react-joyride @radix-ui/react-switch --legacy-peer-deps
+npm run build
+```

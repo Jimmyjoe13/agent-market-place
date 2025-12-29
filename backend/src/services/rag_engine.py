@@ -196,6 +196,22 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             )
         return self._llm_provider
     
+    def _detect_provider_from_model(self, model_id: str) -> str:
+        """Détecte le provider à partir du model_id."""
+        model_lower = model_id.lower()
+        
+        if model_lower.startswith("gpt") or model_lower.startswith("o1"):
+            return "openai"
+        elif model_lower.startswith("deepseek"):
+            return "deepseek"
+        elif model_lower.startswith("gemini"):
+            return "gemini"
+        elif model_lower.startswith("claude"):
+            return "anthropic"
+        else:
+            # Default to Mistral for mistral-* and unknown models
+            return "mistral"
+    
     async def query_async(
         self,
         question: str,
@@ -204,6 +220,8 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         use_rag: bool | None = None,
         enable_reflection: bool | None = None,
         user_id: str | None = None,
+        api_key_id: str | None = None,
+        model_id: str | None = None,
     ) -> RAGResponse:
         """
         Traite une requête de manière asynchrone avec routage intelligent.
@@ -215,6 +233,8 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             use_rag: Forcer/désactiver le RAG.
             enable_reflection: Activer le mode réflexion.
             user_id: ID utilisateur pour l'isolation contextuelle.
+            api_key_id: ID de la clé API/agent pour isolation documents.
+            model_id: Modèle LLM à utiliser (override agent_config).
             
         Returns:
             RAGResponse avec la réponse et les sources.
@@ -245,7 +265,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         vector_context = ""
         if routing.should_use_rag:
             vector_context, vector_sources = await self._search_vector_store(
-                question, user_id
+                question, user_id, api_key_id
             )
             sources.extend(vector_sources)
         
@@ -265,7 +285,20 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         full_context = self._build_context(vector_context, web_context)
         
         # 5. Générer la réponse
-        provider = self._get_llm_provider()
+        # Utiliser le model_id agent si fourni
+        if model_id:
+            # Créer un provider spécifique pour cet agent
+            provider_type = self._detect_provider_from_model(model_id)
+            llm_config = LLMConfig(
+                model=model_id,
+                temperature=self.config.llm_temperature,
+                max_tokens=self.config.llm_max_tokens,
+                enable_reflection=routing.use_reflection,
+            )
+            provider = self._llm_factory.get_provider(provider_type, llm_config, cache=False)
+        else:
+            provider = self._get_llm_provider()
+        
         messages = provider.build_messages(
             question,
             context=full_context if full_context else None,
@@ -544,18 +577,20 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         self,
         query: str,
         user_id: str | None = None,
+        api_key_id: str | None = None,
     ) -> tuple[str, list[ContextSource]]:
-        """Recherche dans le Vector Store."""
+        """Recherche dans le Vector Store avec isolation par agent."""
         try:
             # Générer l'embedding de la requête
             query_embedding = self._embedding_service.embed_query(query)
             
-            # Rechercher les documents similaires
+            # Rechercher les documents similaires (filtrés par api_key_id si fourni)
             matches = self._document_repo.search_similar(
                 query_embedding,
                 threshold=self.config.vector_threshold,
                 limit=self.config.vector_max_results,
                 user_id=user_id,
+                api_key_id=api_key_id,  # Isolation par agent
             )
             
             if not matches:

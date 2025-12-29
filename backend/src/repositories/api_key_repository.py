@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from src.models.api_key import ApiKeyInfo, ApiKeyValidation, ApiKeyUsageStats
+from src.models.api_key import ApiKeyInfo, ApiKeyValidation, ApiKeyUsageStats, AgentConfig
 from src.repositories.base import BaseRepository
 
 
@@ -119,6 +119,14 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         if data.get("user_id"):
             insert_data["user_id"] = data["user_id"]
         
+        # Ajouter agent_config si fourni
+        agent_config = data.get("agent_config", {})
+        if isinstance(agent_config, dict):
+            insert_data["model_id"] = agent_config.get("model_id", "mistral-large-latest")
+            insert_data["system_prompt"] = agent_config.get("system_prompt")
+            insert_data["rag_enabled"] = agent_config.get("rag_enabled", True)
+            insert_data["agent_name"] = agent_config.get("agent_name")
+        
         response = self.table.insert(insert_data).execute()
         created = response.data[0]
         
@@ -209,13 +217,25 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             
             if response.data:
                 data = response.data[0]
+                
+                # Construire AgentConfig si la clé est valide
+                agent_config = None
+                if data["is_valid"]:
+                    agent_config = AgentConfig(
+                        model_id=data.get("model_id") or "mistral-large-latest",
+                        system_prompt=data.get("system_prompt"),
+                        rag_enabled=data.get("rag_enabled", True),
+                        agent_name=data.get("agent_name"),
+                    )
+                
                 return ApiKeyValidation(
-                    id=data["id"] or UUID("00000000-0000-0000-0000-000000000000"),
-                    name=data["name"] or "",
+                    id=data["id"] if data["id"] else None,
+                    user_id=data.get("user_id"),
                     scopes=data["scopes"] or [],
-                    rate_limit_per_minute=data["rate_limit_per_minute"] or 0,
+                    rate_limit=data["rate_limit_per_minute"] or 100,
                     is_valid=data["is_valid"],
                     rejection_reason=data["rejection_reason"],
+                    agent_config=agent_config,
                 )
             return None
             
@@ -362,4 +382,8 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             "expires_at": data.get("expires_at"),
             "last_used_at": data.get("last_used_at"),
             "created_at": data["created_at"],
+            # Agent config fields
+            "agent_model_id": data.get("model_id", "mistral-large-latest"),
+            "agent_name": data.get("agent_name"),
+            "rag_enabled": data.get("rag_enabled", True),
         }
