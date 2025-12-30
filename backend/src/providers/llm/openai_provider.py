@@ -151,9 +151,9 @@ class OpenAILLMProvider(BaseLLMProvider):
         else:
             params["max_tokens"] = self.config.max_tokens
 
-        # Les modèles O-Series ne supportent pas toujours temperature/top_p != 1
-        if is_reasoning:
-            # Souvent forcé à 1.0 par l'API pour ces modèles
+        # Les modèles O-Series et GPT-5 imposent souvent temperature=1.0
+        if is_reasoning or self.config.model.startswith('gpt-5'):
+            # Forcé à 1.0 par l'API pour ces modèles
             params["temperature"] = 1.0
         else:
             params["temperature"] = self.config.temperature
