@@ -8,7 +8,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { 
   Send, 
   Loader2, 
@@ -95,6 +95,27 @@ export default function PlaygroundPage() {
       handleSubmit(e);
     }
   };
+
+  const handleConfigChange = useCallback((newParams: any) => {
+    setParameters(prev => {
+      // Éviter un update si les valeurs sont identiques
+      if (
+        prev.model === newParams.model_id &&
+        prev.systemPrompt === newParams.system_prompt &&
+        prev.temperature === newParams.temperature &&
+        prev.maxTokens === newParams.max_tokens
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        model: newParams.model_id,
+        systemPrompt: newParams.system_prompt,
+        temperature: newParams.temperature,
+        maxTokens: newParams.max_tokens,
+      };
+    });
+  }, []);
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
@@ -324,15 +345,7 @@ export default function PlaygroundPage() {
                 </Button>
               </div>
               <AgentConfigPanel 
-                onConfigChange={(newParams) => {
-                  setParameters(prev => ({
-                    ...prev,
-                    model: newParams.model_id,
-                    systemPrompt: newParams.system_prompt,
-                    temperature: newParams.temperature,
-                    maxTokens: newParams.max_tokens,
-                  }));
-                }}
+                onConfigChange={handleConfigChange}
               />
             </div>
           </div>

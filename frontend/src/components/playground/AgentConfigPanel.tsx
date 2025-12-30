@@ -33,7 +33,7 @@ import {
   Sparkles, 
   Brain, 
   Database, 
-  Settings, 
+  Settings2, 
   Crown, 
   Zap,
   Flame,
@@ -68,6 +68,11 @@ export default function AgentConfigPanel({
     updateConfig 
   } = useAgentConfigManager();
   const { data: session } = useSession();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const userPlan = (session?.user as any)?.plan || 'free';
   const isPremium = userPlan !== 'free';
@@ -158,9 +163,9 @@ export default function AgentConfigPanel({
   if (isLoading) {
     return (
       <Card className={`${className} animate-pulse`}>
-        <CardHeader>
+      <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
+            <Settings2 className="h-5 w-5" />
             Configuration Agent
           </CardTitle>
         </CardHeader>
@@ -175,7 +180,7 @@ export default function AgentConfigPanel({
     <Card className={`${className} border-border/50 bg-card/50 backdrop-blur-sm`}>
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-lg">
-          <Settings className="h-5 w-5 text-primary" />
+          <Settings2 className="h-5 w-5 text-primary" />
           Configuration Agent
         </CardTitle>
         <CardDescription>
@@ -214,7 +219,13 @@ export default function AgentConfigPanel({
                       <div className="flex items-center gap-2">
                         <span>{model.name}</span>
                         {model.premium && (
-                          <Badge variant="default" className={`text-xs ${isPremium ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-zinc-700'} text-white`}>
+                          <Badge 
+                            variant="default" 
+                            className={cn(
+                              "text-xs text-white",
+                              mounted && isPremium ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-zinc-700'
+                            )}
+                          >
                             <Crown className="h-3 w-3 mr-1" />
                             Premium
                           </Badge>
@@ -298,7 +309,7 @@ export default function AgentConfigPanel({
             onClick={() => setShowAdvanced(!showAdvanced)}
           >
             <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer group-hover:text-foreground transition-colors">
-              <Settings className="h-3.5 w-3.5 text-primary" />
+              <Settings2 className="h-3.5 w-3.5 text-primary" />
               Génération
             </Label>
             <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", showAdvanced && "rotate-180")} />
