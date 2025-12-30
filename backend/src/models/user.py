@@ -75,6 +75,7 @@ class UserUpdate(BaseModel):
     
     name: str | None = Field(default=None, max_length=255)
     avatar_url: str | None = None
+    provider_keys: dict[str, str] | None = None
 
 
 class UserInfo(BaseModel):
@@ -93,6 +94,7 @@ class UserInfo(BaseModel):
     email_verified: bool = Field(default=False, description="Email vérifié")
     created_at: datetime = Field(..., description="Date de création")
     last_login_at: datetime | None = Field(default=None, description="Dernière connexion")
+    provider_keys_summary: dict[str, bool] = Field(default_factory=dict, description="Résumé des clés BYOK configurées")
     
     model_config = {"from_attributes": True}
 

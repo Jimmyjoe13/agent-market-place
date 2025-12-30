@@ -130,7 +130,7 @@ class ApiClient {
     return data;
   }
 
-  async updateProfile(data: { name?: string; avatar_url?: string }): Promise<any> {
+  async updateProfile(data: { name?: string; avatar_url?: string; provider_keys?: Record<string, string> }): Promise<any> {
     const { data: updated } = await this.client.patch("/auth/me", data);
     return updated;
   }

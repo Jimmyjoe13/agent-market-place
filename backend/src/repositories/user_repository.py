@@ -21,6 +21,7 @@ from uuid import UUID
 
 from src.models.user import UserCreate, UserInfo, UserWithSubscription, OAuthProvider
 from src.repositories.base import BaseRepository
+from src.utils.encryption import encrypt_value, decrypt_value
 
 
 class UserRepository(BaseRepository[UserInfo]):
@@ -58,6 +59,16 @@ class UserRepository(BaseRepository[UserInfo]):
         except Exception as e:
             self.logger.error("Error fetching user", id=id, error=str(e))
             return None
+
+    def _map_to_user_info(self, data: dict[str, Any]) -> UserInfo:
+        """Ajoute le résumé des clés BYOK au UserInfo."""
+        keys = data.get("provider_keys", {}) or {}
+        summary = {k: bool(v) for k, v in keys.items()}
+        # On ne passe pas provider_keys au constructeur car il n'est pas dans le modèle UserInfo
+        data_copy = data.copy()
+        if "provider_keys" in data_copy:
+            del data_copy["provider_keys"]
+        return UserInfo(**data_copy, provider_keys_summary=summary)
     
     def get_by_email(self, email: str) -> UserInfo | None:
         """
@@ -259,6 +270,7 @@ class UserRepository(BaseRepository[UserInfo]):
         user_id: str,
         name: str | None = None,
         avatar_url: str | None = None,
+        provider_keys: dict[str, str] | None = None,
     ) -> UserInfo | None:
         """
         Met à jour le profil utilisateur.
@@ -276,6 +288,19 @@ class UserRepository(BaseRepository[UserInfo]):
             update_data["name"] = name
         if avatar_url is not None:
             update_data["avatar_url"] = avatar_url
+        if provider_keys is not None:
+            # Récupérer les clés actuelles pour fusionner
+            current_user_data = self.table.select("provider_keys").eq("id", user_id).single().execute().data
+            current_keys = (current_user_data.get("provider_keys") or {}) if current_user_data else {}
+            
+            # Chiffrer et mettre à jour
+            for provider, key in provider_keys.items():
+                if key:
+                    current_keys[provider] = encrypt_value(key)
+                elif provider in current_keys:
+                    del current_keys[provider]
+            
+            update_data["provider_keys"] = current_keys
         
         if not update_data:
             return self.get_by_id(user_id)
@@ -288,7 +313,7 @@ class UserRepository(BaseRepository[UserInfo]):
                 .execute()
             )
             if response.data:
-                return UserInfo(**response.data[0])
+                return self._map_to_user_info(response.data[0])
             return None
         except Exception as e:
             self.logger.error("Error updating profile", error=str(e))

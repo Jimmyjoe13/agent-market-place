@@ -30,6 +30,7 @@ from src.providers.llm import (
 )
 from src.repositories.conversation_repository import ConversationRepository
 from src.repositories.document_repository import DocumentRepository
+from src.repositories.user_repository import UserRepository
 from src.services.embedding_service import EmbeddingService
 from src.services.orchestrator import (
     QueryOrchestrator,
@@ -162,6 +163,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         self._embedding_service = EmbeddingService()
         self._document_repo = DocumentRepository()
         self._conversation_repo = ConversationRepository()
+        self._user_repo = UserRepository()
         self._perplexity = PerplexityAgent()
         
         # Provider LLM principal
@@ -295,9 +297,43 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 max_tokens=self.config.llm_max_tokens,
                 enable_reflection=routing.use_reflection,
             )
-            provider = self._llm_factory.get_provider(provider_type, llm_config, cache=False)
+            
+            # Récupérer les clés de l'utilisateur si disponibles (BYOK)
+            user_keys = {}
+            if user_id:
+                user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
+            
+            provider_api_key = user_keys.get(provider_type)
+            
+            provider = self._llm_factory.get_provider(
+                provider_type, 
+                llm_config, 
+                cache=False, 
+                api_key=provider_api_key
+            )
         else:
-            provider = self._get_llm_provider()
+            # Récupérer les clés de l'utilisateur pour le provider par défaut
+            user_keys = {}
+            if user_id:
+                user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
+            
+            provider_type = self.config.llm_provider
+            provider_api_key = user_keys.get(provider_type)
+            
+            llm_config = LLMConfig(
+                model=self.config.llm_model,
+                temperature=self.config.llm_temperature,
+                max_tokens=self.config.llm_max_tokens,
+                enable_reflection=routing.use_reflection,
+                stream=self.config.enable_streaming,
+            )
+            
+            provider = self._llm_factory.get_provider(
+                provider_type,
+                llm_config,
+                cache=False,
+                api_key=provider_api_key
+            )
         
         messages = provider.build_messages(
             question,
@@ -484,7 +520,29 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         yield {"event": "generation_start", "data": {}}
         
         full_context = self._build_context(vector_context, web_context)
-        provider = self._get_llm_provider()
+        
+        # BYOK logic for streaming
+        user_keys = {}
+        if user_id:
+            user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
+        
+        provider_type = self.config.llm_provider
+        provider_api_key = user_keys.get(provider_type)
+        
+        llm_config = LLMConfig(
+            model=self.config.llm_model,
+            temperature=self.config.llm_temperature,
+            max_tokens=self.config.llm_max_tokens,
+            enable_reflection=routing.use_reflection,
+            stream=True,
+        )
+        
+        provider = self._llm_factory.get_provider(
+            provider_type,
+            llm_config,
+            cache=False,
+            api_key=provider_api_key
+        )
         messages = provider.build_messages(
             question,
             context=full_context if full_context else None,

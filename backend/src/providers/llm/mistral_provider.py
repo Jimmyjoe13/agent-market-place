@@ -43,12 +43,13 @@ class MistralLLMProvider(BaseLLMProvider):
         "open-mixtral-8x22b",
     ]
     
-    def __init__(self, config: LLMConfig | None = None) -> None:
+    def __init__(self, config: LLMConfig | None = None, api_key: str | None = None) -> None:
         """
         Initialise le provider Mistral.
         
         Args:
             config: Configuration optionnelle.
+            api_key: Clé API optionnelle (BYOK).
         """
         settings = get_settings()
         
@@ -60,7 +61,8 @@ class MistralLLMProvider(BaseLLMProvider):
         
         super().__init__(config or default_config)
         
-        self._client = Mistral(api_key=settings.mistral_api_key)
+        effective_key = api_key or settings.mistral_api_key
+        self._client = Mistral(api_key=effective_key)
     
     @property
     def provider_name(self) -> LLMProvider:

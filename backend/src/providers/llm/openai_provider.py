@@ -74,12 +74,13 @@ class OpenAILLMProvider(BaseLLMProvider):
         "o1-pro",
     ]
     
-    def __init__(self, config: LLMConfig | None = None) -> None:
+    def __init__(self, config: LLMConfig | None = None, api_key: str | None = None) -> None:
         """
         Initialise le provider OpenAI.
         
         Args:
             config: Configuration optionnelle.
+            api_key: Clé API optionnelle (BYOK).
         """
         settings = get_settings()
         
@@ -91,15 +92,17 @@ class OpenAILLMProvider(BaseLLMProvider):
         
         super().__init__(config or default_config)
         
+        # Priorité: Clé passée explicitement > Clé du settings
+        effective_key = api_key or getattr(settings, 'openai_api_key', None)
+        
         # Import conditionnel pour éviter d'obliger l'installation
         try:
             from openai import AsyncOpenAI
-            api_key = getattr(settings, 'openai_api_key', None)
-            if not api_key:
+            if not effective_key:
                 self.logger.warning("OpenAI API key not configured")
                 self._client = None
             else:
-                self._client = AsyncOpenAI(api_key=api_key)
+                self._client = AsyncOpenAI(api_key=effective_key)
         except ImportError:
             self.logger.warning("OpenAI package not installed")
             self._client = None

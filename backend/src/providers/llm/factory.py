@@ -80,6 +80,7 @@ class LLMProviderFactory:
         provider_type: LLMProvider | str | None = None,
         config: LLMConfig | None = None,
         cache: bool = True,
+        api_key: str | None = None,
     ) -> BaseLLMProvider:
         """
         Récupère ou crée un provider.
@@ -114,7 +115,7 @@ class LLMProviderFactory:
             )
         
         # Cache key
-        cache_key = f"{provider_type.value}:{config.model if config else 'default'}"
+        cache_key = f"{provider_type.value}:{config.model if config else 'default'}:{hash(api_key)}"
         
         # Retourner du cache si disponible
         if cache and cache_key in self._cache:
@@ -122,7 +123,7 @@ class LLMProviderFactory:
         
         # Créer nouvelle instance
         provider_class = _PROVIDER_REGISTRY[provider_type]
-        provider = provider_class(config)
+        provider = provider_class(config, api_key=api_key)
         
         # Mettre en cache
         if cache:
@@ -182,6 +183,7 @@ _factory: LLMProviderFactory | None = None
 def get_llm_provider(
     provider_type: LLMProvider | str | None = None,
     config: LLMConfig | None = None,
+    api_key: str | None = None,
 ) -> BaseLLMProvider:
     """
     Fonction utilitaire pour récupérer un provider.
@@ -197,7 +199,7 @@ def get_llm_provider(
     if _factory is None:
         _factory = LLMProviderFactory()
     
-    return _factory.get_provider(provider_type, config)
+    return _factory.get_provider(provider_type, config, api_key=api_key)
 
 
 def get_provider_factory() -> LLMProviderFactory:

@@ -251,6 +251,7 @@ async def update_me(
         user_id=str(user.id),
         name=update_data.name,
         avatar_url=update_data.avatar_url,
+        provider_keys=update_data.provider_keys,
     )
     
     if not updated_user:
