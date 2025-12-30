@@ -1,5 +1,9 @@
 /**
- * Sidebar de navigation
+ * Sidebar de navigation (Responsive)
+ * ===================================
+ * 
+ * Desktop : Barre latérale fixe avec icônes
+ * Mobile : Drawer escamotable via Sheet
  */
 
 "use client";
@@ -17,6 +21,8 @@ import {
   Plus,
   Terminal,
   BookOpen,
+  Menu,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -26,6 +32,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { useState } from "react";
 
 const navItems = [
   {
@@ -74,17 +88,52 @@ const navItems = [
   },
 ];
 
-export function Sidebar() {
+interface NavItemProps {
+  item: typeof navItems[0];
+  isActive: boolean;
+  showLabel?: boolean;
+  onClick?: () => void;
+}
+
+function NavItem({ item, isActive, showLabel = false, onClick }: NavItemProps) {
+  return (
+    <Link 
+      href={item.href} 
+      data-tour={item.dataTour}
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all",
+        showLabel ? "w-full" : "h-10 w-10 justify-center",
+        isActive
+          ? "bg-primary/15 text-primary"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+      )}
+    >
+      <item.icon className="h-5 w-5 shrink-0" />
+      {showLabel && (
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate">{item.title}</p>
+          <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+        </div>
+      )}
+    </Link>
+  );
+}
+
+/**
+ * Version Desktop de la sidebar (icônes uniquement)
+ */
+function DesktopSidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full w-16 flex-col items-center border-r border-white/10 bg-zinc-950 py-4">
+    <div className="hidden md:flex h-full w-16 flex-col items-center border-r border-border bg-sidebar py-4">
       {/* Logo */}
       <Link
         href="/"
-        className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/20"
+        className="mb-6 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-brand shadow-lg glow-brand"
       >
-        <Bot className="h-5 w-5 text-white" />
+        <Bot className="h-5 w-5 text-primary-foreground" />
       </Link>
 
       {/* New Chat Button */}
@@ -95,9 +144,9 @@ export function Sidebar() {
               <Button
                 size="icon"
                 variant="ghost"
-                className="mb-2 h-10 w-10 rounded-xl bg-white/5 hover:bg-white/10"
+                className="mb-2 h-10 w-10 rounded-xl bg-accent/50 hover:bg-accent"
               >
-                <Plus className="h-5 w-5 text-zinc-400" />
+                <Plus className="h-5 w-5 text-muted-foreground" />
               </Button>
             </Link>
           </TooltipTrigger>
@@ -105,7 +154,7 @@ export function Sidebar() {
         </Tooltip>
       </TooltipProvider>
 
-      <Separator className="my-4 w-8 bg-white/10" />
+      <Separator className="my-4 w-8 bg-border" />
 
       {/* Navigation */}
       <nav className="flex flex-1 flex-col items-center gap-2 overflow-y-auto w-full no-scrollbar">
@@ -115,24 +164,13 @@ export function Sidebar() {
             return (
               <Tooltip key={item.href}>
                 <TooltipTrigger asChild>
-                  <Link href={item.href} data-tour={item.dataTour}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className={cn(
-                        "h-10 w-10 rounded-xl transition-all",
-                        isActive
-                          ? "bg-indigo-500/20 text-indigo-400"
-                          : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"
-                      )}
-                    >
-                      <item.icon className="h-5 w-5" />
-                    </Button>
-                  </Link>
+                  <div>
+                    <NavItem item={item} isActive={isActive} />
+                  </div>
                 </TooltipTrigger>
                 <TooltipContent side="right">
                   <p className="font-medium">{item.title}</p>
-                  <p className="text-xs text-zinc-400">{item.description}</p>
+                  <p className="text-xs text-muted-foreground">{item.description}</p>
                 </TooltipContent>
               </Tooltip>
             );
@@ -140,6 +178,105 @@ export function Sidebar() {
         </TooltipProvider>
       </nav>
     </div>
+  );
+}
+
+/**
+ * Version Mobile de la sidebar (Drawer)
+ */
+function MobileSidebar() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  const handleNavClick = () => {
+    setOpen(false);
+  };
+
+  return (
+    <div className="md:hidden">
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="fixed top-3 left-3 z-40 h-10 w-10 rounded-xl bg-background/80 backdrop-blur-sm border border-border shadow-lg"
+            aria-label="Ouvrir le menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+        </SheetTrigger>
+        
+        <SheetContent side="left" className="w-72 p-0 bg-sidebar" showCloseButton={false}>
+          <SheetHeader className="p-4 border-b border-border">
+            <div className="flex items-center justify-between">
+              <Link
+                href="/"
+                className="flex items-center gap-3"
+                onClick={handleNavClick}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-brand shadow-lg">
+                  <Bot className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <SheetTitle className="text-lg font-bold">RAG Agent</SheetTitle>
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </SheetHeader>
+
+          {/* New Chat */}
+          <div className="p-4 border-b border-border">
+            <Link href="/chat" onClick={handleNavClick}>
+              <Button className="w-full gap-2 bg-primary hover:bg-primary/90">
+                <Plus className="h-4 w-4" />
+                Nouvelle conversation
+              </Button>
+            </Link>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href;
+              return (
+                <NavItem
+                  key={item.href}
+                  item={item}
+                  isActive={isActive}
+                  showLabel
+                  onClick={handleNavClick}
+                />
+              );
+            })}
+          </nav>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-border">
+            <p className="text-xs text-muted-foreground text-center">
+              © 2024 RAG Agent. v0.1.0
+            </p>
+          </div>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+/**
+ * Sidebar composite : affiche Desktop ou Mobile selon le viewport
+ */
+export function Sidebar() {
+  return (
+    <>
+      <DesktopSidebar />
+      <MobileSidebar />
+    </>
   );
 }
 

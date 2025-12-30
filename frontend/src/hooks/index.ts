@@ -45,3 +45,6 @@ export {
   useUsageStats,
   useRotateKey,
 } from "./useBudgetLimits";
+
+// Panel State (Playground)
+export { usePanelState } from "./usePanelState";

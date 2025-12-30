@@ -1,6 +1,8 @@
 /**
  * Composants d'états réutilisables (Empty, Error, Loading)
  * Ces composants permettent d'afficher des états visuels cohérents dans toute l'application
+ * 
+ * Utilise les variables CSS pour les couleurs (WCAG AA compliant)
  */
 
 "use client";
@@ -54,18 +56,18 @@ export function EmptyState({
         className
       )}
     >
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-900">
-        {icon || <FileQuestion className="h-8 w-8 text-zinc-500" />}
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+        {icon || <FileQuestion className="h-8 w-8 text-muted-foreground" />}
       </div>
-      <h3 className="mb-2 text-lg font-semibold text-zinc-200">{title}</h3>
+      <h3 className="mb-2 text-lg font-semibold text-foreground">{title}</h3>
       {description && (
-        <p className="mb-4 max-w-md text-sm text-zinc-400">{description}</p>
+        <p className="mb-4 max-w-md text-sm text-muted-foreground">{description}</p>
       )}
       {action && (
         <Button
           onClick={action.onClick}
           variant="outline"
-          className="mt-2 border-zinc-700 hover:bg-zinc-800"
+          className="mt-2"
         >
           {action.label}
         </Button>
@@ -88,7 +90,7 @@ export function ErrorState({
     return (
       <div
         className={cn(
-          "flex items-center gap-3 rounded-lg bg-red-500/10 p-4 text-red-400",
+          "flex items-center gap-3 rounded-lg bg-destructive/10 p-4 text-destructive",
           className
         )}
       >
@@ -96,7 +98,7 @@ export function ErrorState({
         <div className="flex-1">
           <p className="text-sm font-medium">{title}</p>
           {description && (
-            <p className="text-xs text-red-400/80">{description}</p>
+            <p className="text-xs text-destructive/80">{description}</p>
           )}
         </div>
         {onRetry && (
@@ -104,7 +106,7 @@ export function ErrorState({
             size="sm"
             variant="ghost"
             onClick={onRetry}
-            className="shrink-0 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+            className="shrink-0 text-destructive hover:bg-destructive/20 hover:text-destructive"
           >
             <RefreshCw className="mr-1 h-4 w-4" />
             {retryLabel}
@@ -118,25 +120,25 @@ export function ErrorState({
     return (
       <div
         className={cn(
-          "rounded-lg border border-red-500/20 bg-red-500/5 p-6",
+          "rounded-lg border border-destructive/20 bg-destructive/5 p-6",
           className
         )}
       >
         <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/10">
-            <AlertCircle className="h-5 w-5 text-red-400" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+            <AlertCircle className="h-5 w-5 text-destructive" />
           </div>
           <div className="flex-1">
-            <h4 className="font-semibold text-red-400">{title}</h4>
+            <h4 className="font-semibold text-destructive">{title}</h4>
             {description && (
-              <p className="mt-1 text-sm text-red-400/70">{description}</p>
+              <p className="mt-1 text-sm text-destructive/70">{description}</p>
             )}
             {onRetry && (
               <Button
                 size="sm"
                 variant="outline"
                 onClick={onRetry}
-                className="mt-4 border-red-500/30 text-red-400 hover:bg-red-500/10"
+                className="mt-4 border-destructive/30 text-destructive hover:bg-destructive/10"
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 {retryLabel}
@@ -156,18 +158,18 @@ export function ErrorState({
         className
       )}
     >
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10">
-        <WifiOff className="h-8 w-8 text-red-400" />
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10">
+        <WifiOff className="h-8 w-8 text-destructive" />
       </div>
-      <h3 className="mb-2 text-lg font-semibold text-red-400">{title}</h3>
+      <h3 className="mb-2 text-lg font-semibold text-destructive">{title}</h3>
       {description && (
-        <p className="mb-4 max-w-md text-sm text-red-400/70">{description}</p>
+        <p className="mb-4 max-w-md text-sm text-destructive/70">{description}</p>
       )}
       {onRetry && (
         <Button
           onClick={onRetry}
           variant="outline"
-          className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+          className="border-destructive/30 text-destructive hover:bg-destructive/10"
         >
           <RefreshCw className="mr-2 h-4 w-4" />
           {retryLabel}
@@ -204,10 +206,10 @@ export function LoadingState({
       )}
     >
       <Loader2
-        className={cn("animate-spin text-indigo-400", sizeClasses[size])}
+        className={cn("animate-spin text-primary", sizeClasses[size])}
       />
       {text && (
-        <p className={cn("text-zinc-400", textSizeClasses[size])}>{text}</p>
+        <p className={cn("text-muted-foreground", textSizeClasses[size])}>{text}</p>
       )}
     </div>
   );
@@ -230,7 +232,7 @@ export function LoadingSpinner({
 
   return (
     <Loader2
-      className={cn("animate-spin text-indigo-400", sizeClasses[size], className)}
+      className={cn("animate-spin text-primary", sizeClasses[size], className)}
     />
   );
 }
