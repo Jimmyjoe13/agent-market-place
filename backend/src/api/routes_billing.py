@@ -48,12 +48,14 @@ async def create_portal(
 @router.post("/webhook")
 async def stripe_webhook(
     request: Request,
-    stripe_signature: Optional[str] = Header(None),
     stripe_service: StripeService = Depends(get_stripe_service)
 ):
     """
     Webhook Stripe pour recevoir les événements de paiement.
     """
+    # Récupérer le header stripe-signature directement depuis la requête
+    stripe_signature = request.headers.get("stripe-signature")
+    
     if not stripe_signature:
         raise HTTPException(status_code=400, detail="Missing stripe-signature header")
         
