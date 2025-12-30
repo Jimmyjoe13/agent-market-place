@@ -126,6 +126,40 @@ class OpenAILLMProvider(BaseLLMProvider):
         
         if not (0 <= self.config.temperature <= 2):
             raise ValueError("Temperature must be between 0 and 2")
+
+    def _get_completion_params(self, messages: list[dict[str, str]], stream: bool = False) -> dict:
+        """
+        Prépare les paramètres de complétion en fonction du modèle.
+        
+        Gère les nouveaux modèles (GPT-5, O-Series) qui requièrent 
+        'max_completion_tokens' au lieu de 'max_tokens'.
+        """
+        # Modèles de raisonnement (O-Series)
+        is_reasoning = self.config.model.startswith(('o1-', 'o3-', 'o4-'))
+        # Nouveaux modèles GPT-5 et GPT-4.1
+        is_new_series = self.config.model.startswith(('gpt-5', 'gpt-4.1'))
+        
+        params = {
+            "model": self.config.model,
+            "messages": messages,
+            "stream": stream,
+        }
+
+        # Paramètre de limite de tokens (nouveau format vs ancien)
+        if is_reasoning or is_new_series:
+            params["max_completion_tokens"] = self.config.max_tokens
+        else:
+            params["max_tokens"] = self.config.max_tokens
+
+        # Les modèles O-Series ne supportent pas toujours temperature/top_p != 1
+        if is_reasoning:
+            # Souvent forcé à 1.0 par l'API pour ces modèles
+            params["temperature"] = 1.0
+        else:
+            params["temperature"] = self.config.temperature
+            params["top_p"] = self.config.top_p
+
+        return params
     
     async def generate(
         self,
@@ -154,13 +188,8 @@ class OpenAILLMProvider(BaseLLMProvider):
         final_messages.extend(messages)
         
         try:
-            response = await self._client.chat.completions.create(
-                model=self.config.model,
-                messages=final_messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                top_p=self.config.top_p,
-            )
+            params = self._get_completion_params(final_messages)
+            response = await self._client.chat.completions.create(**params)
             
             latency_ms = int((time.time() - start_time) * 1000)
             
@@ -202,14 +231,8 @@ class OpenAILLMProvider(BaseLLMProvider):
         final_messages.extend(messages)
         
         try:
-            stream = await self._client.chat.completions.create(
-                model=self.config.model,
-                messages=final_messages,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                top_p=self.config.top_p,
-                stream=True,
-            )
+            params = self._get_completion_params(final_messages, stream=True)
+            stream = await self._client.chat.completions.create(**params)
             
             tokens_count = 0
             in_thought_block = False
