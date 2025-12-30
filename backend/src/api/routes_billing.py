@@ -7,8 +7,8 @@ Endpoints pour la gestion des abonnements et paiements Stripe.
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Header
 from typing import Optional
-from src.api.auth import get_current_user
-from src.models.user import UserWithSubscription, UserInfo
+from src.api.routes_auth import get_current_user
+from src.models.user import UserWithSubscription
 from src.services.stripe_service import StripeService
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
