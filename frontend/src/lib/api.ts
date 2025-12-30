@@ -130,6 +130,11 @@ class ApiClient {
     return data;
   }
 
+  async updateProfile(data: { name?: string; avatar_url?: string }): Promise<any> {
+    const { data: updated } = await this.client.patch("/auth/me", data);
+    return updated;
+  }
+
   async getUserApiKeys(): Promise<{ keys: ApiKeyInfo[]; total: number }> {
     const { data } = await this.client.get("/console/keys");
     return data;

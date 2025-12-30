@@ -27,6 +27,7 @@ from src.config.settings import get_settings
 from src.models.user import (
     UserInfo,
     UserWithSubscription,
+    UserUpdate,
     OAuthProvider,
     SessionInfo,
 )
@@ -235,6 +236,27 @@ async def me(
     Récupère le profil de l'utilisateur connecté.
     """
     return user
+
+
+@router.patch("/me", response_model=UserInfo)
+async def update_me(
+    update_data: UserUpdate,
+    user: UserWithSubscription = Depends(get_current_user),
+    repo: UserRepository = Depends(get_user_repo),
+) -> UserInfo:
+    """
+    Met à jour le profil de l'utilisateur connecté.
+    """
+    updated_user = repo.update_profile(
+        user_id=str(user.id),
+        name=update_data.name,
+        avatar_url=update_data.avatar_url,
+    )
+    
+    if not updated_user:
+        raise HTTPException(status_code=500, detail="Erreur lors de la mise à jour du profil")
+        
+    return updated_user
 
 
 @router.post("/logout")
