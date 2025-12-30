@@ -167,6 +167,18 @@ class ApiClient {
     return data;
   }
 
+  // ===== Billing Endpoints =====
+
+  async createCheckoutSession(plan: "monthly" | "yearly"): Promise<{ url: string }> {
+    const { data } = await this.client.post("/billing/checkout", null, { params: { plan } });
+    return data;
+  }
+
+  async createPortalSession(): Promise<{ url: string }> {
+    const { data } = await this.client.post("/billing/portal");
+    return data;
+  }
+
   // ===== Query Endpoints (Legacy & RAG) =====
 
   async query(request: QueryRequest): Promise<QueryResponse> {

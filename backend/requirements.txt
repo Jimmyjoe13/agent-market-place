@@ -37,6 +37,7 @@ tenacity>=9.0.0
 structlog>=24.4.0
 tiktoken>=0.8.0
 redis>=5.0.0
+stripe>=11.0.0
 
 # ===== Development =====
 pytest>=8.3.0

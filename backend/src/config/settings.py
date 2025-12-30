@@ -108,6 +108,14 @@ class Settings(BaseSettings):
         default="",
         description="Secret pour les webhooks Stripe",
     )
+    stripe_plan_pro_monthly: str = Field(
+        default="prod_ThR4I1zBKvf0wm",
+        description="ID du produit Plan Pro Mensuel",
+    )
+    stripe_plan_pro_yearly: str = Field(
+        default="prod_ThR7BMOmDds81F",
+        description="ID du produit Plan Pro Annuel",
+    )
     
     # ===== Redis Settings (Rate Limiting) =====
     redis_url: str = Field(

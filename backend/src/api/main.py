@@ -38,6 +38,7 @@ from src.api.routes_console import router as console_router
 from src.api.routes_agent import router as agent_router
 from src.api.routes_keys import router as keys_router
 from src.api.routes_jobs import router as jobs_router
+from src.api.routes_billing import router as billing_router
 from src.api.schemas import HealthResponse, ErrorResponse, SourceResponse
 from src.api.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 from src.config.logging_config import setup_logging, get_logger
@@ -334,6 +335,9 @@ def create_app() -> FastAPI:
     
     # Inclure les routes des jobs de documents
     app.include_router(jobs_router, prefix="/api/v1")
+    
+    # Inclure les routes de facturation
+    app.include_router(billing_router, prefix="/api/v1")
     
     # Route de santé à la racine (non protégée)
     @app.get(
