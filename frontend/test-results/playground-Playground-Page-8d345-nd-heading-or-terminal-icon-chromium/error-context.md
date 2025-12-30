@@ -1,0 +1,61 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - img [ref=e10]
+      - heading "RAG Agent Platform" [level=1] [ref=e12]
+      - paragraph [ref=e13]: Developer Platform pour agents IA augmentés
+    - generic [ref=e14]:
+      - heading "Connexion" [level=2] [ref=e15]
+      - generic [ref=e16]:
+        - button "Continuer avec Google" [ref=e17]:
+          - img [ref=e18]
+          - generic [ref=e23]: Continuer avec Google
+        - generic [ref=e28]: Authentification sécurisée
+        - paragraph [ref=e30]: 🔒 Vos données sont protégées par chiffrement SSL
+      - generic [ref=e31]:
+        - paragraph [ref=e32]:
+          - text: Pas encore de compte ?
+          - link "Créer un compte gratuitement" [ref=e33] [cursor=pointer]:
+            - /url: /register
+        - paragraph [ref=e34]:
+          - text: En vous connectant, vous acceptez nos
+          - link "Conditions d'utilisation" [ref=e35] [cursor=pointer]:
+            - /url: /terms
+          - text: et notre
+          - link "Politique de confidentialité" [ref=e36] [cursor=pointer]:
+            - /url: /privacy
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]: 🔑
+        - paragraph [ref=e40]:
+          - text: Clés API
+          - text: Self-Service
+      - generic [ref=e41]:
+        - generic [ref=e42]: 📊
+        - paragraph [ref=e43]:
+          - text: Analytics
+          - text: Temps réel
+      - generic [ref=e44]:
+        - generic [ref=e45]: 🚀
+        - paragraph [ref=e46]:
+          - text: Playground
+          - text: Interactif
+  - region "Notifications alt+T"
+  - generic [ref=e51] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e52]:
+      - img [ref=e53]
+    - generic [ref=e56]:
+      - button "Open issues overlay" [ref=e57]:
+        - generic [ref=e58]:
+          - generic [ref=e59]: "2"
+          - generic [ref=e60]: "3"
+        - generic [ref=e61]:
+          - text: Issue
+          - generic [ref=e62]: s
+      - button "Collapse issues badge" [ref=e63]:
+        - img [ref=e64]
+  - alert [ref=e66]
+```
