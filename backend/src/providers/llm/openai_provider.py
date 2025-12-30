@@ -20,35 +20,58 @@ from .base_llm import (
 
 class OpenAILLMProvider(BaseLLMProvider):
     """
-    Provider OpenAI.
+    Provider OpenAI (Décembre 2025).
     
     Supporte les modèles :
-    - gpt-5
-    - gpt-5-mini
-    - gpt-5-nano
-    - gpt-4.1
-    - gpt-4.1-mini
-    - gpt-4.1-nano
-    - gpt-4o (flagship multimodal)
-    - gpt-4o-mini (économique)
-    - gpt-4-turbo
-    - gpt-4
-    - gpt-3.5-turbo (rapide, bon pour le routage)
+    
+    PREMIUM (abonnement requis):
+    - GPT-5.2 Series: gpt-5.2, gpt-5.2-pro (flagship, codage, agentique)
+    - GPT-5.1 Series: gpt-5.1, gpt-5.1-codex-max (raisonnement configurable)
+    - O-Series: o3-deep-research, o3-pro, o4-mini-deep-research, o1-pro (research)
+    
+    STANDARD (gratuit):
+    - GPT-5 Series: gpt-5, gpt-5-mini, gpt-5-nano
+    - GPT-4.1 Series: gpt-4.1, gpt-4.1-mini, gpt-4.1-nano
+    - Legacy: gpt-4o, gpt-4o-mini, gpt-4-turbo
     """
     
+    # Tous les modèles disponibles
     MODELS = [
+        # GPT-5.2 Series (Flagship - Premium)
+        "gpt-5.2",
+        "gpt-5.2-pro",
+        # GPT-5.1 Series (Premium)
+        "gpt-5.1",
+        "gpt-5.1-codex-max",
+        # GPT-5 Series (Standard)
         "gpt-5",
         "gpt-5-mini",
         "gpt-5-nano",
+        # GPT-4.1 Series (Standard)
         "gpt-4.1",
         "gpt-4.1-mini",
         "gpt-4.1-nano",
+        # O-Series (Research - Premium)
+        "o3-deep-research",
+        "o3-pro",
+        "o4-mini-deep-research",
+        "o1-pro",
+        # Legacy (Standard)
         "gpt-4o",
         "gpt-4o-mini",
         "gpt-4-turbo",
-        "gpt-4",
-        "gpt-3.5-turbo",
-        "gpt-3.5-turbo-16k",
+    ]
+    
+    # Modèles nécessitant un abonnement premium
+    PREMIUM_MODELS = [
+        "gpt-5.2",
+        "gpt-5.2-pro",
+        "gpt-5.1",
+        "gpt-5.1-codex-max",
+        "o3-deep-research",
+        "o3-pro",
+        "o4-mini-deep-research",
+        "o1-pro",
     ]
     
     def __init__(self, config: LLMConfig | None = None) -> None:

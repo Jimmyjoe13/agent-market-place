@@ -6,6 +6,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { useAgentConfigManager } from '@/hooks/useAgentConfig';
 import { 
   Card, 
@@ -26,7 +27,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, Sparkles, Brain, Database, Settings } from 'lucide-react';
+import { Loader2, Save, Sparkles, Brain, Database, Settings, Crown, Zap } from 'lucide-react';
 
 interface AgentConfigPanelProps {
   className?: string;
@@ -44,6 +45,10 @@ export default function AgentConfigPanel({
     isUpdating, 
     updateConfig 
   } = useAgentConfigManager();
+  const { data: session } = useSession();
+
+  const userPlan = (session?.user as any)?.plan || 'free';
+  const isPremium = userPlan !== 'free';
 
   // État local pour les modifications non sauvegardées
   const [localConfig, setLocalConfig] = useState({
@@ -164,22 +169,49 @@ export default function AgentConfigPanel({
                     {provider}
                   </div>
                   {providerModels.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
+                    <SelectItem 
+                      key={model.id} 
+                      value={model.id}
+                      disabled={model.premium && !isPremium}
+                    >
                       <div className="flex items-center gap-2">
                         <span>{model.name}</span>
-                        {model.recommended && (
+                        {model.premium && (
+                          <Badge variant="default" className={`text-xs ${isPremium ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-zinc-700'} text-white`}>
+                            <Crown className="h-3 w-3 mr-1" />
+                            Premium
+                          </Badge>
+                        )}
+                        {model.new && (
+                          <Badge variant="outline" className="text-xs border-green-500 text-green-600">
+                            <Zap className="h-3 w-3 mr-1" />
+                            New
+                          </Badge>
+                        )}
+                        {model.recommended && !model.premium && (
                           <Badge variant="secondary" className="text-xs">
                             <Sparkles className="h-3 w-3 mr-1" />
                             Recommandé
                           </Badge>
                         )}
                       </div>
+                      {model.description && (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {model.description}
+                        </span>
+                      )}
                     </SelectItem>
                   ))}
                 </div>
               ))}
             </SelectContent>
           </Select>
+          {!isPremium && (
+            <p className="text-[10px] text-amber-500 flex items-center gap-1">
+              <Crown className="h-3 w-3" />
+              Certains modèles nécessitent un abonnement Pro
+            </p>
+          )}
         </div>
 
         {/* Toggle RAG */}

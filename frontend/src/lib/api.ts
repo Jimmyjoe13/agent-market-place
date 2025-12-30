@@ -254,7 +254,10 @@ class ApiClient {
       id: string;
       provider: string;
       name: string;
+      description?: string;
       recommended?: boolean;
+      premium?: boolean;
+      new?: boolean;
     }>;
   }> {
     const { data } = await this.client.get("/agent/available-models");

@@ -12,6 +12,8 @@ from src.api.auth import require_api_key
 from src.config.logging_config import get_logger
 from src.models.api_key import AgentConfig, AgentConfigUpdate, ApiKeyValidation
 from src.repositories.api_key_repository import ApiKeyRepository
+from src.repositories.subscription_repository import SubscriptionRepository
+from src.models.subscription import PlanSlug
 
 logger = get_logger(__name__)
 
@@ -29,8 +31,9 @@ class AgentConfigResponse(BaseModel):
     config: AgentConfig = Field(..., description="Configuration actuelle")
 
 
-# Repository singleton
+# Repositories
 _agent_repo: ApiKeyRepository | None = None
+_sub_repo: SubscriptionRepository | None = None
 
 
 def get_agent_repo() -> ApiKeyRepository:
@@ -39,6 +42,24 @@ def get_agent_repo() -> ApiKeyRepository:
     if _agent_repo is None:
         _agent_repo = ApiKeyRepository()
     return _agent_repo
+
+
+def get_sub_repo() -> SubscriptionRepository:
+    """Retourne le repository subscriptions."""
+    global _sub_repo
+    if _sub_repo is None:
+        _sub_repo = SubscriptionRepository()
+    return _sub_repo
+
+
+# Modèles nécessitant un abonnement PREMIUM
+PREMIUM_MODELS = [
+    # OpenAI Premium
+    "gpt-5.2", "gpt-5.2-pro", "gpt-5.1", "gpt-5.1-codex-max",
+    "o3-deep-research", "o3-pro", "o4-mini-deep-research", "o1-pro",
+    # Deepseek Premium
+    "deepseek-reasoner"
+]
 
 
 @router.get(
@@ -97,6 +118,31 @@ async def update_agent_config(
     update_data = {}
     
     if update.model_id is not None:
+        # Vérifier si c'est un modèle premium
+        if update.model_id in PREMIUM_MODELS:
+            # Vérifier l'abonnement du propriétaire de la clé
+            sub_repo = get_sub_repo()
+            subscription = sub_repo.get_user_subscription(str(api_key.user_id))
+            
+            is_premium = (
+                subscription is not None and 
+                subscription.plan.slug != PlanSlug.FREE
+            )
+            
+            if not is_premium:
+                logger.warning(
+                    "Premium model access denied",
+                    user_id=str(api_key.user_id),
+                    model_id=update.model_id
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "premium_required",
+                        "message": f"Le modèle {update.model_id} nécessite un abonnement PRO."
+                    }
+                )
+        
         update_data["model_id"] = update.model_id
     
     if update.system_prompt is not None:
@@ -158,17 +204,39 @@ async def list_available_models() -> dict:
     """
     return {
         "models": [
-            # Mistral
-            {"id": "mistral-large-latest", "provider": "mistral", "name": "Mistral Large", "recommended": True},
-            {"id": "mistral-medium-latest", "provider": "mistral", "name": "Mistral Medium"},
-            {"id": "mistral-small-latest", "provider": "mistral", "name": "Mistral Small"},
-            # OpenAI
-            {"id": "gpt-4o", "provider": "openai", "name": "GPT-4o"},
-            {"id": "gpt-4o-mini", "provider": "openai", "name": "GPT-4o Mini"},
-            {"id": "gpt-4-turbo", "provider": "openai", "name": "GPT-4 Turbo"},
-            # Deepseek
-            {"id": "deepseek-chat", "provider": "deepseek", "name": "Deepseek Chat", "recommended": True},
-            {"id": "deepseek-coder", "provider": "deepseek", "name": "Deepseek Coder"},
-            {"id": "deepseek-reasoner", "provider": "deepseek", "name": "Deepseek Reasoner"},
+            # === MISTRAL ===
+            {"id": "mistral-large-latest", "provider": "mistral", "name": "Mistral Large", "description": "Flagship Mistral", "recommended": True, "premium": False},
+            {"id": "mistral-medium-latest", "provider": "mistral", "name": "Mistral Medium", "description": "Balanced", "premium": False},
+            {"id": "mistral-small-latest", "provider": "mistral", "name": "Mistral Small", "description": "Fast & cheap", "premium": False},
+            
+            # === OPENAI - GPT-5.2 Series (Premium) ===
+            {"id": "gpt-5.2", "provider": "openai", "name": "GPT-5.2", "description": "State-of-the-art agentic & coding", "recommended": True, "premium": True, "new": True},
+            {"id": "gpt-5.2-pro", "provider": "openai", "name": "GPT-5.2 Pro", "description": "Maximum intelligence", "premium": True, "new": True},
+            
+            # === OPENAI - GPT-5.1 Series (Premium) ===
+            {"id": "gpt-5.1", "provider": "openai", "name": "GPT-5.1", "description": "Advanced reasoning", "premium": True},
+            {"id": "gpt-5.1-codex-max", "provider": "openai", "name": "GPT-5.1 Codex Max", "description": "Best for software engineering", "premium": True},
+            
+            # === OPENAI - O-Series (Premium) ===
+            {"id": "o3-deep-research", "provider": "openai", "name": "o3 Deep Research", "description": "Autonomous research agent", "premium": True, "new": True},
+            {"id": "o3-pro", "provider": "openai", "name": "o3-pro", "description": "Reasoning flagship", "premium": True},
+            {"id": "o4-mini-deep-research", "provider": "openai", "name": "o4-mini Deep Research", "description": "Fast research", "premium": True, "new": True},
+            {"id": "o1-pro", "provider": "openai", "name": "o1-pro", "description": "Legacy reasoning flagship", "premium": True},
+            
+            # === OPENAI - GPT-5 Series (Standard) ===
+            {"id": "gpt-5", "provider": "openai", "name": "GPT-5", "description": "Standard intelligence", "premium": False, "new": True},
+            {"id": "gpt-5-mini", "provider": "openai", "name": "GPT-5 Mini", "description": "Balanced & cost-effective", "premium": False, "new": True},
+            {"id": "gpt-5-nano", "provider": "openai", "name": "GPT-5 Nano", "description": "Ultra fast & lightweight", "premium": False, "new": True},
+            
+            # === OPENAI - GPT-4.1 Series (Standard) ===
+            # === OPENAI - Legacy (Standard) ===
+            {"id": "gpt-4o", "provider": "openai", "name": "GPT-4o", "description": "Legacy multimodal", "premium": False},
+            {"id": "gpt-4o-mini", "provider": "openai", "name": "GPT-4o Mini", "description": "Legacy economic", "premium": False},
+            {"id": "gpt-4-turbo", "provider": "openai", "name": "GPT-4 Turbo", "description": "128K context", "premium": False},
+            
+            # === DEEPSEEK ===
+            {"id": "deepseek-chat", "provider": "deepseek", "name": "Deepseek Chat", "description": "General chat", "recommended": True, "premium": False},
+            {"id": "deepseek-coder", "provider": "deepseek", "name": "Deepseek Coder", "description": "Code generation", "premium": False},
+            {"id": "deepseek-reasoner", "provider": "deepseek", "name": "Deepseek Reasoner", "description": "Advanced reasoning", "premium": True},
         ]
     }

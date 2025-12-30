@@ -33,7 +33,10 @@ export interface LLMModel {
   id: string;
   provider: string;
   name: string;
+  description?: string;
   recommended?: boolean;
+  premium?: boolean;
+  new?: boolean;
 }
 
 // Query keys
