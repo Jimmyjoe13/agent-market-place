@@ -231,6 +231,9 @@ export interface UserProfile {
   documents_limit: number;
   api_keys_used: number;
   api_keys_limit: number;
+  
+  // BYOK Provider Keys Summary
+  provider_keys_summary?: Record<string, boolean>;
 }
 
 export interface Plan {
