@@ -34,11 +34,8 @@ class StripeService:
         if not user:
             raise ValueError("Utilisateur non trouvé")
 
-        # Déterminer le Price ID (Stripe utilise des Price IDs pour les abonnements)
-        # Note: Dans sa requête, l'utilisateur a donné des Product IDs. 
-        # Pour Checkout en mode abonnement, il faut techniquement le Price ID.
-        # Si prod_xxx est passé, Stripe peut essayer de trouver le prix par défaut if set.
-        price_id = settings.stripe_plan_pro_monthly if plan_type == "monthly" else settings.stripe_plan_pro_yearly
+        # Déterminer le Price ID
+        price_id = settings.stripe_price_pro_monthly if plan_type == "monthly" else settings.stripe_price_pro_yearly
 
         try:
             session = stripe.checkout.Session.create(
