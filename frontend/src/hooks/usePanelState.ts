@@ -13,13 +13,11 @@ import { useState, useEffect, useCallback } from "react";
 const STORAGE_KEY = "playground_panels_state";
 
 interface PanelState {
-  leftCollapsed: boolean;
   rightCollapsed: boolean;
   codePreviewCollapsed: boolean;
 }
 
 const DEFAULT_STATE: PanelState = {
-  leftCollapsed: false,
   rightCollapsed: false,
   codePreviewCollapsed: true,
 };
@@ -63,20 +61,12 @@ export function usePanelState() {
     }
   }, [state, isHydrated]);
 
-  const toggleLeft = useCallback(() => {
-    setState((prev) => ({ ...prev, leftCollapsed: !prev.leftCollapsed }));
-  }, []);
-
   const toggleRight = useCallback(() => {
     setState((prev) => ({ ...prev, rightCollapsed: !prev.rightCollapsed }));
   }, []);
 
   const toggleCodePreview = useCallback(() => {
     setState((prev) => ({ ...prev, codePreviewCollapsed: !prev.codePreviewCollapsed }));
-  }, []);
-
-  const setLeftCollapsed = useCallback((collapsed: boolean) => {
-    setState((prev) => ({ ...prev, leftCollapsed: collapsed }));
   }, []);
 
   const setRightCollapsed = useCallback((collapsed: boolean) => {
@@ -89,18 +79,15 @@ export function usePanelState() {
 
   return {
     // État
-    leftCollapsed: state.leftCollapsed,
     rightCollapsed: state.rightCollapsed,
     codePreviewCollapsed: state.codePreviewCollapsed,
     isHydrated,
     
     // Toggles
-    toggleLeft,
     toggleRight,
     toggleCodePreview,
     
     // Setters directs
-    setLeftCollapsed,
     setRightCollapsed,
     setCodePreviewCollapsed,
   };

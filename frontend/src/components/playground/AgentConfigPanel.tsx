@@ -27,7 +27,29 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Save, Sparkles, Brain, Database, Settings, Crown, Zap } from 'lucide-react';
+import { 
+  Loader2, 
+  Save, 
+  Sparkles, 
+  Brain, 
+  Database, 
+  Settings, 
+  Crown, 
+  Zap,
+  Flame,
+  Maximize2,
+  ChevronDown,
+  Info
+} from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { Separator } from '@/components/ui/separator';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { cn } from '@/lib/utils';
 
 interface AgentConfigPanelProps {
   className?: string;
@@ -56,8 +78,12 @@ export default function AgentConfigPanel({
     system_prompt: '',
     rag_enabled: true,
     agent_name: '',
+    temperature: 0.7,
+    max_tokens: 2048,
+    top_p: 1.0,
   });
   const [hasChanges, setHasChanges] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Synchroniser avec la config serveur
   useEffect(() => {
@@ -67,6 +93,9 @@ export default function AgentConfigPanel({
         system_prompt: config.system_prompt || '',
         rag_enabled: config.rag_enabled,
         agent_name: config.agent_name || '',
+        temperature: (config as any).temperature ?? 0.7,
+        max_tokens: (config as any).max_tokens ?? 2048,
+        top_p: (config as any).top_p ?? 1.0,
       });
       setHasChanges(false);
     }
@@ -79,7 +108,10 @@ export default function AgentConfigPanel({
         localConfig.model_id !== config.model_id ||
         localConfig.system_prompt !== (config.system_prompt || '') ||
         localConfig.rag_enabled !== config.rag_enabled ||
-        localConfig.agent_name !== (config.agent_name || '');
+        localConfig.agent_name !== (config.agent_name || '') ||
+        localConfig.temperature !== ((config as any).temperature ?? 0.7) ||
+        localConfig.max_tokens !== ((config as any).max_tokens ?? 2048) ||
+        localConfig.top_p !== ((config as any).top_p ?? 1.0);
       setHasChanges(changed);
       
       if (changed && onConfigChange) {
@@ -103,6 +135,11 @@ export default function AgentConfigPanel({
     if (localConfig.agent_name !== (config?.agent_name || '')) {
       updates.agent_name = localConfig.agent_name || null;
     }
+    
+    // Note: If backend supports these, add them to updates
+    updates.temperature = localConfig.temperature;
+    updates.max_tokens = localConfig.max_tokens;
+    updates.top_p = localConfig.top_p;
 
     if (Object.keys(updates).length > 0) {
       updateConfig(updates);
@@ -234,9 +271,9 @@ export default function AgentConfigPanel({
         </div>
 
         {/* Prompt système */}
-        <div className="space-y-2" id="agent-system-prompt">
-          <Label className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-yellow-500" />
+        <div className="space-y-3" id="agent-system-prompt">
+          <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <Sparkles className="h-3.5 w-3.5 text-yellow-500" />
             Prompt Système
           </Label>
           <Textarea
@@ -245,11 +282,86 @@ export default function AgentConfigPanel({
             onChange={(e) =>
               setLocalConfig(prev => ({ ...prev, system_prompt: e.target.value }))
             }
-            className="min-h-[120px] resize-none"
+            className="min-h-[100px] bg-secondary/30 border-border/50 text-sm resize-none focus-visible:ring-primary/40"
           />
-          <p className="text-xs text-muted-foreground">
-            Laissez vide pour utiliser le prompt par défaut
+          <p className="text-[10px] text-muted-foreground italic">
+            Laissez vide pour utiliser le prompt par défaut (expert en RAG).
           </p>
+        </div>
+
+        <Separator className="bg-border/50" />
+
+        {/* Paramètres de Génération */}
+        <div className="space-y-6">
+          <div 
+            className="flex items-center justify-between cursor-pointer group"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer group-hover:text-foreground transition-colors">
+              <Settings className="h-3.5 w-3.5 text-primary" />
+              Génération
+            </Label>
+            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", showAdvanced && "rotate-180")} />
+          </div>
+
+          {showAdvanced && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+              {/* Temperature */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <Flame className="h-3.5 w-3.5 text-orange-500" />
+                    Température
+                  </Label>
+                  <Badge variant="secondary" className="font-mono text-[10px] h-5 px-1.5">
+                    {localConfig.temperature}
+                  </Badge>
+                </div>
+                <Slider 
+                  value={[localConfig.temperature]} 
+                  min={0} 
+                  max={2} 
+                  step={0.1}
+                  onValueChange={([v]) => setLocalConfig(prev => ({ ...prev, temperature: v }))}
+                  className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
+                />
+                <p className="text-[10px] text-muted-foreground leading-tight">
+                  Contrôle le caractère aléatoire. 0 est précis, 1+ est créatif.
+                </p>
+              </div>
+
+              {/* Max Tokens */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <Maximize2 className="h-3.5 w-3.5 text-blue-500" />
+                    Longueur Max
+                  </Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="secondary" className="font-mono text-[10px] h-5 px-1.5 flex items-center gap-1">
+                          {localConfig.max_tokens}
+                          <Info className="h-3 w-3 opacity-50" />
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="text-[10px]">
+                        Tokens maximum dans la réponse
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <Slider 
+                  value={[localConfig.max_tokens]} 
+                  min={64} 
+                  max={8192} 
+                  step={64}
+                  onValueChange={([v]) => setLocalConfig(prev => ({ ...prev, max_tokens: v }))}
+                  className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bouton sauvegarder */}

@@ -19,7 +19,11 @@ import {
   Settings2,
   Code2,
   PanelRightOpen,
-  PanelRightClose
+  PanelRightClose,
+  Sparkles,
+  Zap,
+  ShieldCheck,
+  Globe
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,7 +38,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
 import { usePanelState } from "@/hooks/usePanelState";
-import { PlaygroundParameters } from "@/components/playground/parameters";
 import { CodePreview } from "@/components/playground/code-preview";
 import AgentConfigPanel from "@/components/playground/AgentConfigPanel";
 import type { Message } from "@/types/api";
@@ -58,10 +61,8 @@ export default function PlaygroundPage() {
 
   // Panel state management with persistence
   const {
-    leftCollapsed,
     rightCollapsed,
     codePreviewCollapsed,
-    toggleLeft,
     toggleRight,
     toggleCodePreview,
     isHydrated,
@@ -96,48 +97,47 @@ export default function PlaygroundPage() {
   };
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      {/* Parameters Panel (Left) - Collapsible */}
-      <PlaygroundParameters 
-        parameters={parameters} 
-        setParameters={setParameters}
-        onReset={() => setParameters(DEFAULT_PARAMS)}
-        isCollapsed={leftCollapsed}
-        onToggleCollapse={toggleLeft}
-      />
-
+    <div className="flex h-full w-full overflow-hidden bg-background">
       {/* Main Playground Area (Middle) */}
       <div className="flex-1 flex flex-col min-w-0 bg-background">
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-3">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Terminal className="h-4 w-4 text-primary" />
+        <div className="flex shrink-0 items-center justify-between border-b border-border/50 bg-card/30 backdrop-blur-md px-6 py-4">
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-inner">
+              <Terminal className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-foreground uppercase tracking-widest">Playground</h1>
-              <p className="text-[10px] text-muted-foreground font-medium">TEST L'API EN CONDITIONS RÉELLES</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-bold text-foreground uppercase tracking-[0.2em]">Playground</h1>
+                <Badge variant="outline" className="text-[9px] h-4 border-primary/20 bg-primary/5 text-primary font-bold">BETA</Badge>
+              </div>
+              <p className="text-[10px] text-muted-foreground font-medium flex items-center gap-1.5 mt-0.5">
+                <Sparkles className="h-3 w-3 text-yellow-500" />
+                ENVIRONNEMENT DE TEST ISOLÉ
+              </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {!hasApiKey && (
-              <Badge variant="outline" className="border-warning/30 bg-warning/5 text-warning text-[10px]">
+              <Badge variant="outline" className="border-warning/30 bg-warning/5 text-warning text-[10px] px-2 py-0.5 font-bold animate-pulse">
                 API KEY REQUISE
               </Badge>
             )}
             
+            <div className="h-8 w-[1px] bg-border/50 mx-1 hidden sm:block" />
+
             <TooltipProvider delayDuration={0}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    className="h-8 text-xs gap-2 text-muted-foreground hover:text-destructive"
+                    className="h-9 px-3 text-xs gap-2 text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-colors"
                     onClick={newConversation}
                   >
-                    <Eraser className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Clear</span>
+                    <Eraser className="h-4 w-4" />
+                    <span className="hidden md:inline">Effacer</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Effacer la conversation</TooltipContent>
@@ -146,12 +146,17 @@ export default function PlaygroundPage() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
-                    variant="ghost" 
+                    variant="outline" 
                     size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-primary lg:hidden"
+                    className={cn(
+                      "h-9 w-9 text-muted-foreground hover:text-primary transition-all border-border/50",
+                      !rightCollapsed && "bg-primary/5 text-primary border-primary/20"
+                    )}
                     onClick={toggleRight}
                   >
-                    {rightCollapsed ? <PanelRightOpen className="h-4 w-4" /> : <PanelRightClose className="h-4 w-4" />}
+                    <Settings2 
+                      className={cn("h-4 w-4 transition-transform duration-300", !rightCollapsed && "rotate-90 text-primary")} 
+                    />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -166,13 +171,31 @@ export default function PlaygroundPage() {
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6" ref={scrollContainerRef}>
           <div className="max-w-4xl mx-auto space-y-8 pb-12">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center pt-20 text-center space-y-4">
-                <div className="h-12 w-12 rounded-2xl bg-primary/5 flex items-center justify-center animate-subtle-pulse">
-                  <Bot className="h-6 w-6 text-muted-foreground" />
+              <div className="flex flex-col items-center justify-center pt-24 text-center space-y-6">
+                <div className="relative">
+                  <div className="absolute -inset-4 bg-primary/20 rounded-full blur-2xl animate-pulse" />
+                  <div className="relative h-16 w-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center border border-primary/10">
+                    <Bot className="h-8 w-8 text-primary" />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <h3 className="text-sm font-medium text-foreground">Prêt à tester l'API ?</h3>
-                  <p className="text-xs text-muted-foreground">Saisissez un message ci-dessous pour commencer la simulation.</p>
+                <div className="space-y-2 max-w-sm">
+                  <h3 className="text-base font-semibold text-foreground">Sandbox RAG Active</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Testez vos agents avec la recherche web, le RAG documentaire et des paramètres avancés dans cet environnement isolé.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 w-full max-w-md pt-4">
+                  {[
+                    { icon: Globe, text: "Web Search" },
+                    { icon: ShieldCheck, text: "Strict RAG" },
+                    { icon: Zap, text: "Fast Stream" },
+                    { icon: Settings2, text: "Custom API" }
+                  ].map((feat, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2.5 rounded-xl border border-border/50 bg-secondary/20 text-[10px] font-medium text-muted-foreground">
+                      <feat.icon className="h-3.5 w-3.5 text-primary/70" />
+                      {feat.text}
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : (
@@ -180,38 +203,41 @@ export default function PlaygroundPage() {
                 <div 
                   key={message.id}
                   className={cn(
-                    "flex gap-4 group",
+                    "flex gap-4 group animate-in fade-in slide-in-from-bottom-2 duration-300",
                     message.role === "user" ? "flex-row-reverse" : "flex-row"
                   )}
                 >
                   <div className={cn(
-                    "shrink-0 h-8 w-8 rounded-lg flex items-center justify-center",
-                    message.role === "user" ? "bg-secondary" : "bg-primary/20"
+                    "shrink-0 h-9 w-9 rounded-xl flex items-center justify-center shadow-sm",
+                    message.role === "user" 
+                      ? "bg-secondary text-secondary-foreground border border-border" 
+                      : "bg-primary text-primary-foreground shadow-primary/20"
                   )}>
                     {message.role === "user" ? (
-                      <User className="h-4 w-4 text-secondary-foreground" />
+                      <User className="h-4.5 w-4.5" />
                     ) : (
-                      <Bot className="h-4 w-4 text-primary" />
+                      <Bot className="h-4.5 w-4.5" />
                     )}
                   </div>
                   <div className={cn(
-                    "flex-1 max-w-[85%] space-y-1",
-                    message.role === "user" ? "text-right" : "text-left"
+                    "flex-1 max-w-[85%] space-y-1.5",
+                    message.role === "user" ? "items-end text-right" : "items-start text-left"
                   )}>
-                    <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                    <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest px-1">
                       {message.role === "user" ? "Client Request" : "API Response"}
                     </div>
                     {message.isLoading ? (
-                      <div className="space-y-2">
-                        <Skeleton className="h-4 w-full bg-primary/5" />
-                        <Skeleton className="h-4 w-[60%] bg-primary/5" />
+                      <div className="space-y-2.5 p-4 rounded-2xl bg-secondary/30 border border-border/50">
+                        <Skeleton className="h-3.5 w-full bg-primary/5" />
+                        <Skeleton className="h-3.5 w-[80%] bg-primary/5" />
+                        <Skeleton className="h-3.5 w-[60%] bg-primary/5" />
                       </div>
                     ) : (
                       <div className={cn(
-                        "p-3 rounded-xl text-sm leading-relaxed",
+                        "p-4 rounded-2xl text-sm leading-relaxed shadow-sm transition-all",
                         message.role === "user" 
-                          ? "bg-secondary border border-border text-secondary-foreground" 
-                          : "bg-primary/5 text-foreground"
+                          ? "bg-secondary/50 border border-border text-foreground hover:bg-secondary/70" 
+                          : "bg-card border border-border/50 text-foreground hover:border-primary/20"
                       )}>
                         {message.content}
                       </div>
@@ -225,38 +251,41 @@ export default function PlaygroundPage() {
         </div>
 
         {/* Input Area */}
-        <div className="p-6 border-t border-border shadow-[0_-20px_50px_rgba(0,0,0,0.3)]">
+        <div className="p-6 border-t border-border/50 bg-card/10 backdrop-blur-sm">
           <div className="max-w-4xl mx-auto">
             <form onSubmit={handleSubmit} className="relative group">
-              <Textarea 
-                placeholder="Entrez votre question..."
-                className="bg-secondary/50 border-border min-h-[100px] pr-14 custom-scrollbar focus-visible:ring-primary/50 transition-all text-sm"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isLoading}
-              />
-              <Button 
-                size="icon"
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className="absolute bottom-3 right-3 bg-primary hover:bg-primary/90 h-9 w-9 shadow-lg glow-brand"
-              >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/20 to-purple-500/20 rounded-2xl blur opacity-0 group-focus-within:opacity-100 transition duration-500" />
+              <div className="relative">
+                <Textarea 
+                  placeholder="Posez une question à l'API..."
+                  className="bg-secondary/40 border-border/50 min-h-[110px] pr-14 py-4 rounded-2xl custom-scrollbar focus-visible:ring-primary/40 focus-visible:border-primary/30 transition-all text-sm shadow-inner"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isLoading}
+                />
+                <Button 
+                  size="icon"
+                  type="submit"
+                  disabled={!input.trim() || isLoading}
+                  className="absolute bottom-3 right-3 bg-primary hover:bg-primary/90 h-10 w-10 shadow-lg glow-brand rounded-xl"
+                >
+                  {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                </Button>
+              </div>
             </form>
-            <div className="mt-3 flex items-center justify-between">
-              <div className="flex items-center gap-4 text-[10px] text-muted-foreground font-mono">
-                <span className="flex items-center gap-1">
-                  <kbd className="px-1 bg-secondary border border-border rounded">Enter</kbd> to send
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center gap-4 text-[10px] text-muted-foreground/70 font-mono">
+                <span className="flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 bg-secondary border border-border/50 rounded text-[9px]">Enter</kbd> Envoyer
                 </span>
-                <span className="flex items-center gap-1 hidden sm:flex">
-                  <kbd className="px-1 bg-secondary border border-border rounded">Shift+Enter</kbd> for newline
+                <span className="flex items-center gap-1.5 hidden sm:flex">
+                  <kbd className="px-1.5 py-0.5 bg-secondary border border-border/50 rounded text-[9px]">Shift+Enter</kbd> Saut de ligne
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[10px] text-success font-mono border-success/20">
-                  STREAMING ENABLED
+                <Badge variant="outline" className="text-[9px] text-success font-bold tracking-tighter border-success/20 bg-success/5 animate-subtle-pulse">
+                  STREAMING ACTIF
                 </Badge>
               </div>
             </div>
@@ -273,23 +302,39 @@ export default function PlaygroundPage() {
       {/* Agent Config Panel (Right) - Collapsible on desktop, hidden on mobile unless toggled */}
       <div 
         className={cn(
-          "border-l border-border bg-card/50 overflow-y-auto transition-all duration-300 ease-in-out",
+          "border-l border-border bg-card/40 backdrop-blur-xl overflow-hidden transition-all duration-300 ease-in-out h-full flex flex-col",
           // Desktop: toujours visible, width change based on collapsed state
-          "hidden lg:block",
-          rightCollapsed ? "lg:w-0 lg:border-l-0" : "lg:w-80",
+          "hidden lg:flex",
+          rightCollapsed ? "lg:w-0 lg:border-l-0" : "lg:w-[340px]",
           // Mobile: absolute overlay when toggled open
-          !rightCollapsed && "fixed inset-y-0 right-0 w-80 z-50 lg:relative lg:inset-auto"
+          !rightCollapsed && "fixed inset-y-0 right-0 w-[300px] z-50 lg:relative lg:inset-auto"
         )}
       >
         {!rightCollapsed && (
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-4 lg:hidden">
-              <h2 className="font-semibold text-sm">Configuration Agent</h2>
-              <Button variant="ghost" size="icon" onClick={toggleRight}>
-                <PanelRightClose className="h-4 w-4" />
-              </Button>
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
+            <div className="p-5 border-b border-border/50 bg-secondary/5 hidden lg:flex items-center gap-2">
+              <Settings2 className="h-4 w-4 text-primary" />
+              <span className="text-xs font-bold uppercase tracking-widest text-foreground">Configuration</span>
             </div>
-            <AgentConfigPanel />
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-4 lg:hidden">
+                <h2 className="font-semibold text-sm">Configuration Agent</h2>
+                <Button variant="ghost" size="icon" onClick={toggleRight}>
+                  <PanelRightClose className="h-4 w-4" />
+                </Button>
+              </div>
+              <AgentConfigPanel 
+                onConfigChange={(newParams) => {
+                  setParameters(prev => ({
+                    ...prev,
+                    model: newParams.model_id,
+                    systemPrompt: newParams.system_prompt,
+                    temperature: newParams.temperature,
+                    maxTokens: newParams.max_tokens,
+                  }));
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
