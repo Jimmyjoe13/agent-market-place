@@ -370,8 +370,9 @@ def create_app() -> FastAPI:
             services=services,
         )
     
-    @app.get(
+    @app.api_route(
         "/",
+        methods=["GET", "HEAD"],
         tags=["Health"],
         summary="Page d'accueil",
         description="Informations de base sur l'API.",
