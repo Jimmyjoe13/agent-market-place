@@ -40,6 +40,7 @@ class ModelInfo(BaseModel):
     recommended: bool = False
     premium: bool = False
     new: bool = False
+    coming_soon: bool = False  # True si pas encore intégré
 
 
 class AvailableModelsResponse(BaseModel):
@@ -48,9 +49,11 @@ class AvailableModelsResponse(BaseModel):
 
 
 # ===== Available Models (December 2025) =====
+# Providers disponibles: Mistral, OpenAI, DeepSeek
+# Coming soon: Google, Anthropic
 
 AVAILABLE_MODELS = [
-    # ===== Mistral =====
+    # ===== Mistral (DISPONIBLE) =====
     ModelInfo(
         id="mistral-large-latest",
         provider="Mistral",
@@ -79,85 +82,14 @@ AVAILABLE_MODELS = [
         new=True,
     ),
     
-    # ===== OpenAI GPT-5 Series (Aug 2025) =====
-    ModelInfo(
-        id="gpt-5.2-pro",
-        provider="OpenAI",
-        name="GPT-5.2 Pro",
-        description="Top-tier pour coding et agentic tasks",
-        premium=True,
-        new=True,
-    ),
-    ModelInfo(
-        id="gpt-5.2",
-        provider="OpenAI",
-        name="GPT-5.2",
-        description="Modèle phare GPT-5 avancé",
-        premium=True,
-        new=True,
-    ),
-    ModelInfo(
-        id="gpt-5.1",
-        provider="OpenAI",
-        name="GPT-5.1",
-        description="Intelligent reasoning model",
-        premium=True,
-    ),
-    ModelInfo(
-        id="gpt-5-mini",
-        provider="OpenAI",
-        name="GPT-5 Mini",
-        description="Version rapide et économique de GPT-5",
-    ),
-    ModelInfo(
-        id="gpt-5-nano",
-        provider="OpenAI",
-        name="GPT-5 Nano",
-        description="Le plus rapide et économique",
-    ),
-    
-    # ===== OpenAI GPT-4.1 Series (Apr 2025) =====
-    ModelInfo(
-        id="gpt-4.1",
-        provider="OpenAI",
-        name="GPT-4.1",
-        description="Optimisé pour le coding et les instructions",
-    ),
-    ModelInfo(
-        id="gpt-4.1-mini",
-        provider="OpenAI",
-        name="GPT-4.1 Mini",
-        description="Version compacte de GPT-4.1",
-    ),
-    ModelInfo(
-        id="gpt-4.1-nano",
-        provider="OpenAI",
-        name="GPT-4.1 Nano",
-        description="Ultra-rapide et bon marché",
-    ),
-    
-    # ===== OpenAI o-series (Reasoning) =====
-    ModelInfo(
-        id="o4-mini",
-        provider="OpenAI",
-        name="o4-mini",
-        description="Reasoning rapide et économique",
-        new=True,
-    ),
-    ModelInfo(
-        id="o3",
-        provider="OpenAI",
-        name="o3",
-        description="Reasoning avancé",
-        premium=True,
-    ),
-    
-    # ===== OpenAI Legacy (encore supportés) =====
+    # ===== OpenAI (DISPONIBLE) =====
+    # GPT-4o series (actuellement supportés)
     ModelInfo(
         id="gpt-4o",
         provider="OpenAI",
         name="GPT-4o",
         description="Modèle multimodal rapide",
+        recommended=True,
     ),
     ModelInfo(
         id="gpt-4o-mini",
@@ -165,62 +97,37 @@ AVAILABLE_MODELS = [
         name="GPT-4o Mini",
         description="Version compacte de GPT-4o",
     ),
-    
-    # ===== Google Gemini 3 Series (Nov 2025) =====
     ModelInfo(
-        id="gemini-3-pro",
-        provider="Google",
-        name="Gemini 3 Pro",
-        description="Le plus puissant de Google",
+        id="gpt-4-turbo",
+        provider="OpenAI",
+        name="GPT-4 Turbo",
+        description="Rapide avec contexte étendu",
+        premium=True,
+    ),
+    ModelInfo(
+        id="gpt-3.5-turbo",
+        provider="OpenAI",
+        name="GPT-3.5 Turbo",
+        description="Économique et rapide",
+    ),
+    # o-series reasoning (si disponible dans votre clé API)
+    ModelInfo(
+        id="o1-preview",
+        provider="OpenAI",
+        name="o1 Preview",
+        description="Reasoning avancé",
         premium=True,
         new=True,
     ),
     ModelInfo(
-        id="gemini-3-flash",
-        provider="Google",
-        name="Gemini 3 Flash",
-        description="Rapide avec performance frontier",
-        new=True,
-    ),
-    ModelInfo(
-        id="gemini-3-deep-think",
-        provider="Google",
-        name="Gemini 3 Deep Think",
-        description="Reasoning profond",
-        premium=True,
+        id="o1-mini",
+        provider="OpenAI",
+        name="o1 Mini",
+        description="Reasoning rapide et économique",
         new=True,
     ),
     
-    # ===== Google Gemini 2.5 Series (Mid 2025) =====
-    ModelInfo(
-        id="gemini-2.5-pro",
-        provider="Google",
-        name="Gemini 2.5 Pro",
-        description="Modèle pro avec adaptive thinking",
-        premium=True,
-    ),
-    ModelInfo(
-        id="gemini-2.5-flash",
-        provider="Google",
-        name="Gemini 2.5 Flash",
-        description="Rapide et optimisé prix/performance",
-    ),
-    ModelInfo(
-        id="gemini-2.5-flash-lite",
-        provider="Google",
-        name="Gemini 2.5 Flash Lite",
-        description="Le plus économique de Google",
-    ),
-    
-    # ===== Google Gemini 2.0 (Early 2025) =====
-    ModelInfo(
-        id="gemini-2.0-flash",
-        provider="Google",
-        name="Gemini 2.0 Flash",
-        description="2x plus rapide que 1.5 Pro",
-    ),
-    
-    # ===== DeepSeek =====
+    # ===== DeepSeek (DISPONIBLE) =====
     ModelInfo(
         id="deepseek-chat",
         provider="DeepSeek",
@@ -235,19 +142,45 @@ AVAILABLE_MODELS = [
         new=True,
     ),
     
-    # ===== Anthropic Claude =====
+    # ===== Google Gemini (COMING SOON) =====
+    ModelInfo(
+        id="gemini-2.0-flash",
+        provider="Google",
+        name="Gemini 2.0 Flash",
+        description="2x plus rapide que 1.5 Pro",
+        coming_soon=True,
+    ),
+    ModelInfo(
+        id="gemini-1.5-pro",
+        provider="Google",
+        name="Gemini 1.5 Pro",
+        description="Modèle avancé de Google",
+        premium=True,
+        coming_soon=True,
+    ),
+    ModelInfo(
+        id="gemini-1.5-flash",
+        provider="Google",
+        name="Gemini 1.5 Flash",
+        description="Rapide et optimisé",
+        coming_soon=True,
+    ),
+    
+    # ===== Anthropic Claude (COMING SOON) =====
     ModelInfo(
         id="claude-3.5-sonnet",
         provider="Anthropic",
         name="Claude 3.5 Sonnet",
         description="Modèle équilibré d'Anthropic",
         premium=True,
+        coming_soon=True,
     ),
     ModelInfo(
         id="claude-3.5-haiku",
         provider="Anthropic",
         name="Claude 3.5 Haiku",
         description="Rapide et économique",
+        coming_soon=True,
     ),
 ]
 

@@ -134,7 +134,7 @@ async def get_api_key(
     if not validation.is_valid:
         logger.warning(
             "API key rejected",
-            key_id=str(validation.id),
+            key_id=str(validation.key_id),
             reason=validation.rejection_reason,
         )
         
@@ -160,7 +160,7 @@ async def get_api_key(
     rate_limiter = get_rate_limiter()
     
     # On limite par ID de clé si présent, sinon par IP (fallback/public)
-    limit_id = f"key:{validation.id}" if validation else f"ip:{client_ip}"
+    limit_id = f"key:{validation.key_id}" if validation else f"ip:{client_ip}"
     limit_value = validation.rate_limit if validation else settings.rate_limit_requests
     
     allowed, count, retry_after = await rate_limiter.is_allowed(
@@ -186,17 +186,13 @@ async def get_api_key(
     request.state.rate_limit_max = limit_value
     request.state.rate_limit_retry_after = retry_after
     
-    # Accès direct à la configuration agent
-    if validation and validation.agent_config:
-        request.state.agent_config = validation.agent_config
-    
     if validation:
         logger.debug(
             "API key validated",
-            key_id=str(validation.id),
+            key_id=str(validation.key_id),
             scopes=validation.scopes,
             rate_count=count,
-            model_id=validation.agent_config.model_id if validation.agent_config else None,
+            model_id=validation.model_id,
         )
     
     return validation
@@ -265,7 +261,7 @@ def require_scope(scope: str | ApiKeyScope) -> Callable:
         if scope_value not in api_key.scopes and "admin" not in api_key.scopes:
             logger.warning(
                 "Scope denied",
-                key_id=str(api_key.id),
+                key_id=str(api_key.key_id),
                 required=scope_value,
                 has=api_key.scopes,
             )
