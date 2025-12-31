@@ -200,12 +200,26 @@ async def get_my_usage(
     sub_repo = get_sub_repo()
     usage = sub_repo.get_user_usage(str(user.id))
     
+    # Base response with plan from user
+    base_response = {
+        "plan": user.plan_slug,
+        "subscription_status": user.subscription_status,
+    }
+    
     if not usage:
         return {
+            **base_response,
             "period": "current",
             "requests_count": 0,
             "requests_limit": user.requests_limit,
-            "plan": user.plan_slug,
+            "documents_count": 0,
+            "documents_limit": user.documents_limit,
+            "api_keys_count": 0,
+            "api_keys_limit": user.api_keys_limit,
         }
-        
-    return usage
+    
+    # Merge usage stats with plan info
+    return {
+        **usage.model_dump(),
+        **base_response,
+    }

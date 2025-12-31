@@ -330,18 +330,24 @@ class UserRepository(BaseRepository[UserInfo]):
             UserWithSubscription ou None si non trouvé.
         """
         try:
-            # Récupérer l'utilisateur avec son abonnement et usage
-            response = self.client.rpc("get_user_usage", {
-                "p_user_id": user_id,
-            }).execute()
+            # Récupérer les données brutes de l'utilisateur (inclut plan_slug, subscription_status)
+            user_response = self.table.select("*").eq("id", user_id).single().execute()
+            if not user_response.data:
+                return None
+            user_data = user_response.data
             
+            # Récupérer l'utilisateur comme objet UserInfo
             user = self.get_by_id(user_id)
             if not user:
                 return None
             
+            # Récupérer l'usage
+            response = self.client.rpc("get_user_usage", {
+                "p_user_id": user_id,
+            }).execute()
             usage_data = response.data[0] if response.data else {}
             
-            # Récupérer les infos subscription
+            # Récupérer les infos subscription (optionnel, pour la compatibilité)
             sub_response = (
                 self.client.table("subscriptions")
                 .select("*, plans(*)")
@@ -354,11 +360,20 @@ class UserRepository(BaseRepository[UserInfo]):
             sub_data = sub_response.data if sub_response.data else {}
             plan_data = sub_data.get("plans", {}) if sub_data else {}
             
+            # Priorité : lire plan_slug directement depuis users (mis à jour par Stripe webhook)
+            # Fallback : lire depuis subscriptions/plans
+            effective_plan_slug = user_data.get("plan_slug") or plan_data.get("slug", "free")
+            effective_status = user_data.get("subscription_status") or sub_data.get("status", "inactive")
+            
+            # Déterminer le nom du plan à partir du slug
+            plan_name_map = {"free": "Free", "pro": "Pro", "enterprise": "Enterprise"}
+            effective_plan_name = plan_data.get("name") or plan_name_map.get(effective_plan_slug, "Free")
+            
             return UserWithSubscription(
                 **user.model_dump(),
-                plan_slug=plan_data.get("slug", "free"),
-                plan_name=plan_data.get("name", "Free"),
-                subscription_status=sub_data.get("status", "active"),
+                plan_slug=effective_plan_slug,
+                plan_name=effective_plan_name,
+                subscription_status=effective_status,
                 billing_period=sub_data.get("billing_period", "monthly"),
                 current_period_end=sub_data.get("current_period_end"),
                 requests_used=usage_data.get("requests_count", 0),
