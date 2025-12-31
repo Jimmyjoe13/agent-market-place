@@ -82,8 +82,105 @@ AVAILABLE_MODELS = [
         new=True,
     ),
     
-    # ===== OpenAI (DISPONIBLE) =====
-    # GPT-4o series (actuellement supportés)
+    # ===== OpenAI GPT-5 Series (DISPONIBLE - Aug 2025) =====
+    ModelInfo(
+        id="gpt-5",
+        provider="OpenAI",
+        name="GPT-5",
+        description="Modèle phare multimodal unifié",
+        premium=True,
+        new=True,
+    ),
+    ModelInfo(
+        id="gpt-5.1",
+        provider="OpenAI",
+        name="GPT-5.1",
+        description="Intelligent reasoning model",
+        premium=True,
+        new=True,
+    ),
+    ModelInfo(
+        id="gpt-5.2",
+        provider="OpenAI",
+        name="GPT-5.2",
+        description="Modèle avancé pour coding et agentic",
+        premium=True,
+        new=True,
+    ),
+    ModelInfo(
+        id="gpt-5.2-pro",
+        provider="OpenAI",
+        name="GPT-5.2 Pro",
+        description="Top-tier pour coding et agentic tasks",
+        premium=True,
+        new=True,
+    ),
+    ModelInfo(
+        id="gpt-5-mini",
+        provider="OpenAI",
+        name="GPT-5 Mini",
+        description="Version rapide et économique de GPT-5",
+        new=True,
+    ),
+    ModelInfo(
+        id="gpt-5-nano",
+        provider="OpenAI",
+        name="GPT-5 Nano",
+        description="Le plus rapide et économique",
+        new=True,
+    ),
+    
+    # ===== OpenAI GPT-4.1 Series (DISPONIBLE - Apr 2025) =====
+    ModelInfo(
+        id="gpt-4.1",
+        provider="OpenAI",
+        name="GPT-4.1",
+        description="Optimisé pour le coding et les instructions",
+    ),
+    ModelInfo(
+        id="gpt-4.1-mini",
+        provider="OpenAI",
+        name="GPT-4.1 Mini",
+        description="Version compacte de GPT-4.1",
+    ),
+    ModelInfo(
+        id="gpt-4.1-nano",
+        provider="OpenAI",
+        name="GPT-4.1 Nano",
+        description="Ultra-rapide et bon marché",
+    ),
+    
+    # ===== OpenAI o-series Reasoning (DISPONIBLE) =====
+    ModelInfo(
+        id="o3",
+        provider="OpenAI",
+        name="o3",
+        description="Reasoning avancé",
+        premium=True,
+        new=True,
+    ),
+    ModelInfo(
+        id="o4-mini",
+        provider="OpenAI",
+        name="o4-mini",
+        description="Reasoning rapide et économique",
+        new=True,
+    ),
+    ModelInfo(
+        id="o1-preview",
+        provider="OpenAI",
+        name="o1 Preview",
+        description="Reasoning (version preview)",
+        premium=True,
+    ),
+    ModelInfo(
+        id="o1-mini",
+        provider="OpenAI",
+        name="o1 Mini",
+        description="Reasoning compact",
+    ),
+    
+    # ===== OpenAI Legacy (DISPONIBLE) =====
     ModelInfo(
         id="gpt-4o",
         provider="OpenAI",
@@ -110,22 +207,6 @@ AVAILABLE_MODELS = [
         name="GPT-3.5 Turbo",
         description="Économique et rapide",
     ),
-    # o-series reasoning (si disponible dans votre clé API)
-    ModelInfo(
-        id="o1-preview",
-        provider="OpenAI",
-        name="o1 Preview",
-        description="Reasoning avancé",
-        premium=True,
-        new=True,
-    ),
-    ModelInfo(
-        id="o1-mini",
-        provider="OpenAI",
-        name="o1 Mini",
-        description="Reasoning rapide et économique",
-        new=True,
-    ),
     
     # ===== DeepSeek (DISPONIBLE) =====
     ModelInfo(
@@ -142,7 +223,59 @@ AVAILABLE_MODELS = [
         new=True,
     ),
     
-    # ===== Google Gemini (COMING SOON) =====
+    # ===== Google Gemini 3 Series (COMING SOON - Nov 2025) =====
+    ModelInfo(
+        id="gemini-3-pro",
+        provider="Google",
+        name="Gemini 3 Pro",
+        description="Le plus puissant de Google",
+        premium=True,
+        new=True,
+        coming_soon=True,
+    ),
+    ModelInfo(
+        id="gemini-3-flash",
+        provider="Google",
+        name="Gemini 3 Flash",
+        description="Rapide avec performance frontier",
+        new=True,
+        coming_soon=True,
+    ),
+    ModelInfo(
+        id="gemini-3-deep-think",
+        provider="Google",
+        name="Gemini 3 Deep Think",
+        description="Reasoning profond",
+        premium=True,
+        new=True,
+        coming_soon=True,
+    ),
+    
+    # ===== Google Gemini 2.5 Series (COMING SOON - Mid 2025) =====
+    ModelInfo(
+        id="gemini-2.5-pro",
+        provider="Google",
+        name="Gemini 2.5 Pro",
+        description="Modèle pro avec adaptive thinking",
+        premium=True,
+        coming_soon=True,
+    ),
+    ModelInfo(
+        id="gemini-2.5-flash",
+        provider="Google",
+        name="Gemini 2.5 Flash",
+        description="Rapide et optimisé prix/performance",
+        coming_soon=True,
+    ),
+    ModelInfo(
+        id="gemini-2.5-flash-lite",
+        provider="Google",
+        name="Gemini 2.5 Flash Lite",
+        description="Le plus économique de Google",
+        coming_soon=True,
+    ),
+    
+    # ===== Google Gemini 2.0 (COMING SOON) =====
     ModelInfo(
         id="gemini-2.0-flash",
         provider="Google",
@@ -150,6 +283,8 @@ AVAILABLE_MODELS = [
         description="2x plus rapide que 1.5 Pro",
         coming_soon=True,
     ),
+    
+    # ===== Google Gemini 1.5 Legacy (COMING SOON) =====
     ModelInfo(
         id="gemini-1.5-pro",
         provider="Google",
@@ -180,6 +315,14 @@ AVAILABLE_MODELS = [
         provider="Anthropic",
         name="Claude 3.5 Haiku",
         description="Rapide et économique",
+        coming_soon=True,
+    ),
+    ModelInfo(
+        id="claude-3-opus",
+        provider="Anthropic",
+        name="Claude 3 Opus",
+        description="Le plus puissant d'Anthropic",
+        premium=True,
         coming_soon=True,
     ),
 ]
