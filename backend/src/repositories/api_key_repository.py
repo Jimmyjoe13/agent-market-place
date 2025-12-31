@@ -9,11 +9,10 @@ Ce module fournit les opérations CRUD pour les clés API :
 - Validation avec mise à jour d'usage
 - Révocation et listing
 
-Example:
-    >>> from src.repositories.api_key_repository import ApiKeyRepository
-    >>> repo = ApiKeyRepository()
-    >>> key_data = repo.create("My App", ["query", "feedback"])
-    >>> print(f"Clé créée: {key_data['key']}")  # Sauvegarder immédiatement!
+Architecture v2:
+- Chaque clé API est liée à un agent
+- La configuration LLM est sur l'agent, pas sur la clé
+- Un agent peut avoir plusieurs clés API
 """
 
 import hashlib
@@ -22,7 +21,8 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from src.models.api_key import ApiKeyInfo, ApiKeyValidation, ApiKeyUsageStats, AgentConfig
+from src.models.api_key import ApiKeyInfo, ApiKeyValidation, ApiKeyUsageStats
+from src.models.agent import AgentConfig
 from src.repositories.base import BaseRepository
 
 
@@ -32,7 +32,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
     
     Gère la création, validation et révocation des clés.
     Les clés sont stockées sous forme de hash SHA-256.
-    Supporté multi-tenant via user_id.
+    Chaque clé est liée à un agent.
     
     Attributes:
         KEY_PREFIX: Préfixe des clés générées ("sk-proj-").
@@ -59,7 +59,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         try:
             response = (
                 self.table
-                .select("*")
+                .select("*, agents(name, model_id, rag_enabled)")
                 .eq("id", id)
                 .single()
                 .execute()
@@ -73,30 +73,33 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
     
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """
-        Crée une nouvelle clé API.
+        Crée une nouvelle clé API liée à un agent.
         
         Args:
-            data: Dictionnaire avec name, scopes, rate_limit, etc.
+            data: Dictionnaire avec:
+                - name: Nom de la clé
+                - agent_id: UUID de l'agent (requis)
+                - user_id: UUID de l'utilisateur (requis)
+                - scopes: Liste des permissions
+                - rate_limit_per_minute: Limite par minute
+                - expires_in_days: Jours avant expiration
             
         Returns:
             Dictionnaire avec la clé complète (⚠️ affichée une seule fois).
-            
-        Example:
-            >>> repo = ApiKeyRepository()
-            >>> result = repo.create({
-            ...     "name": "Production",
-            ...     "scopes": ["query"],
-            ...     "rate_limit_per_minute": 100
-            ... })
-            >>> print(result["key"])  # rag_a1b2c3d4...
         """
+        # Validation
+        if not data.get("agent_id"):
+            raise ValueError("agent_id is required")
+        if not data.get("user_id"):
+            raise ValueError("user_id is required")
+        
         # Générer la clé aléatoire
         random_part = secrets.token_hex(self.KEY_LENGTH // 2)
         full_key = f"{self.KEY_PREFIX}{random_part}"
         
         # Calculer le hash et le préfixe
         key_hash = self._hash_key(full_key)
-        key_prefix = full_key[:12]  # rag_ + 8 chars
+        key_prefix = full_key[:12]
         
         # Calculer la date d'expiration
         expires_at = None
@@ -106,26 +109,14 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         # Préparer les données pour insertion
         insert_data = {
             "name": data["name"],
+            "agent_id": str(data["agent_id"]),
+            "user_id": str(data["user_id"]),
             "key_hash": key_hash,
             "key_prefix": key_prefix,
             "scopes": data.get("scopes", ["query"]),
-            "rate_limit_per_minute": data.get("rate_limit_per_minute", 100),
-            "monthly_quota": data.get("monthly_quota", 0),
+            "rate_limit_per_minute": data.get("rate_limit_per_minute", 60),
             "expires_at": expires_at.isoformat() if expires_at else None,
-            "metadata": data.get("metadata", {}),
         }
-        
-        # Ajouter user_id si fourni (multi-tenant)
-        if data.get("user_id"):
-            insert_data["user_id"] = data["user_id"]
-        
-        # Ajouter agent_config si fourni
-        agent_config = data.get("agent_config", {})
-        if isinstance(agent_config, dict):
-            insert_data["model_id"] = agent_config.get("model_id", "mistral-large-latest")
-            insert_data["system_prompt"] = agent_config.get("system_prompt")
-            insert_data["rag_enabled"] = agent_config.get("rag_enabled", True)
-            insert_data["agent_name"] = agent_config.get("agent_name")
         
         response = self.table.insert(insert_data).execute()
         created = response.data[0]
@@ -134,6 +125,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             "API key created",
             id=created["id"],
             name=data["name"],
+            agent_id=str(data["agent_id"]),
             prefix=key_prefix,
         )
         
@@ -165,8 +157,6 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         """
         Révoque une clé API (soft delete).
         
-        La clé reste dans la base mais devient inutilisable.
-        
         Args:
             id: UUID de la clé.
             
@@ -187,22 +177,14 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         client_ip: str | None = None,
     ) -> ApiKeyValidation | None:
         """
-        Valide une clé API.
-        
-        Vérifie que la clé existe, est active, non expirée,
-        et n'a pas dépassé son quota.
+        Valide une clé API et récupère la config de l'agent associé.
         
         Args:
-            key: Clé API complète (ex: rag_xxxx...).
+            key: Clé API complète (ex: sk-proj-xxxx...).
             client_ip: Adresse IP du client pour logging.
             
         Returns:
-            ApiKeyValidation avec les permissions ou None si invalide.
-            
-        Example:
-            >>> validation = repo.validate("rag_a1b2c3d4...")
-            >>> if validation and validation.is_valid:
-            ...     print(f"Scopes: {validation.scopes}")
+            ApiKeyValidation avec les permissions et config agent.
         """
         key_hash = self._hash_key(key)
         
@@ -218,24 +200,19 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             if response.data:
                 data = response.data[0]
                 
-                # Construire AgentConfig si la clé est valide
-                agent_config = None
-                if data["is_valid"]:
-                    agent_config = AgentConfig(
-                        model_id=data.get("model_id") or "mistral-large-latest",
-                        system_prompt=data.get("system_prompt"),
-                        rag_enabled=data.get("rag_enabled", True),
-                        agent_name=data.get("agent_name"),
-                    )
-                
                 return ApiKeyValidation(
-                    id=data["id"] if data["id"] else None,
-                    user_id=data.get("user_id"),
-                    scopes=data["scopes"] or [],
-                    rate_limit=data["rate_limit_per_minute"] or 100,
                     is_valid=data["is_valid"],
-                    rejection_reason=data["rejection_reason"],
-                    agent_config=agent_config,
+                    key_id=data.get("key_id"),
+                    agent_id=data.get("agent_id"),
+                    user_id=data.get("user_id"),
+                    scopes=data.get("scopes") or [],
+                    rate_limit=data.get("rate_limit_per_minute") or 60,
+                    rejection_reason=data.get("rejection_reason"),
+                    # Config agent
+                    model_id=data.get("model_id"),
+                    system_prompt=data.get("system_prompt"),
+                    rag_enabled=data.get("rag_enabled"),
+                    agent_name=data.get("agent_name"),
                 )
             return None
             
@@ -246,6 +223,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
     def list_keys(
         self,
         user_id: str | None = None,
+        agent_id: str | None = None,
         page: int = 1,
         per_page: int = 20,
         include_inactive: bool = False,
@@ -254,7 +232,8 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         Liste les clés API avec pagination.
         
         Args:
-            user_id: Filtrer par utilisateur (multi-tenant).
+            user_id: Filtrer par utilisateur.
+            agent_id: Filtrer par agent.
             page: Numéro de page (1-indexed).
             per_page: Nombre de résultats par page.
             include_inactive: Inclure les clés révoquées.
@@ -262,11 +241,16 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         Returns:
             Tuple (liste des clés, total).
         """
-        query = self.table.select("*", count="exact")
+        query = self.table.select(
+            "*, agents(name, model_id, rag_enabled)",
+            count="exact"
+        )
         
-        # Filtre multi-tenant
         if user_id:
             query = query.eq("user_id", user_id)
+        
+        if agent_id:
+            query = query.eq("agent_id", agent_id)
         
         if not include_inactive:
             query = query.eq("is_active", True)
@@ -286,6 +270,57 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         
         return keys, total
     
+    def get_by_agent(self, agent_id: str) -> list[ApiKeyInfo]:
+        """
+        Récupère toutes les clés d'un agent.
+        
+        Args:
+            agent_id: UUID de l'agent.
+            
+        Returns:
+            Liste des clés API.
+        """
+        try:
+            response = (
+                self.table
+                .select("*, agents(name, model_id, rag_enabled)")
+                .eq("agent_id", agent_id)
+                .eq("is_active", True)
+                .order("created_at", desc=True)
+                .execute()
+            )
+            
+            return [
+                ApiKeyInfo(**self._format_key_data(k))
+                for k in response.data
+            ]
+        except Exception as e:
+            self.logger.error("Error fetching agent keys", agent_id=agent_id, error=str(e))
+            return []
+    
+    def count_user_keys(self, user_id: str) -> int:
+        """
+        Compte les clés actives d'un utilisateur.
+        
+        Args:
+            user_id: UUID de l'utilisateur.
+            
+        Returns:
+            Nombre de clés.
+        """
+        try:
+            response = (
+                self.table
+                .select("id", count="exact")
+                .eq("user_id", user_id)
+                .eq("is_active", True)
+                .execute()
+            )
+            return response.count or 0
+        except Exception as e:
+            self.logger.error("Error counting user keys", error=str(e))
+            return 0
+    
     def get_usage_stats(
         self,
         key_id: str,
@@ -293,13 +328,6 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
     ) -> ApiKeyUsageStats | None:
         """
         Récupère les statistiques d'utilisation d'une clé.
-        
-        Args:
-            key_id: UUID de la clé.
-            days: Période en jours.
-            
-        Returns:
-            ApiKeyUsageStats avec les métriques.
         """
         try:
             response = self.client.rpc(
@@ -310,11 +338,11 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             if response.data:
                 data = response.data[0]
                 return ApiKeyUsageStats(
-                    total_requests=data["total_requests"] or 0,
-                    avg_response_time=data["avg_response_time"],
-                    error_rate=data["error_rate"] or 0,
-                    requests_by_endpoint=data["requests_by_endpoint"] or {},
-                    requests_by_day=data["requests_by_day"] or {},
+                    total_requests=data.get("total_requests") or 0,
+                    avg_response_time=data.get("avg_response_time"),
+                    error_rate=data.get("error_rate") or 0,
+                    requests_by_endpoint=data.get("requests_by_endpoint") or {},
+                    requests_by_day=data.get("requests_by_day") or {},
                 )
             return None
             
@@ -322,45 +350,21 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             self.logger.error("Error getting API key stats", error=str(e))
             return None
     
-    def log_usage(
-        self,
-        key_id: str,
-        endpoint: str,
-        method: str,
-        status_code: int,
-        response_time_ms: int,
-        client_ip: str | None = None,
-        user_agent: str | None = None,
-    ) -> bool:
+    def update_last_used(self, key_id: str, client_ip: str | None = None) -> None:
         """
-        Enregistre une utilisation de clé API.
+        Met à jour la date de dernière utilisation.
         
         Args:
             key_id: UUID de la clé.
-            endpoint: Endpoint appelé.
-            method: Méthode HTTP.
-            status_code: Code de réponse.
-            response_time_ms: Temps de réponse.
-            client_ip: IP du client.
-            user_agent: User-Agent du client.
-            
-        Returns:
-            True si le log a été créé.
+            client_ip: Adresse IP du client.
         """
         try:
-            self.client.table("api_key_usage_logs").insert({
-                "api_key_id": key_id,
-                "endpoint": endpoint,
-                "method": method,
-                "status_code": status_code,
-                "response_time_ms": response_time_ms,
-                "client_ip": client_ip,
-                "user_agent": user_agent[:500] if user_agent else None,
-            }).execute()
-            return True
+            self.table.update({
+                "last_used_at": datetime.utcnow().isoformat(),
+                "last_used_ip": client_ip,
+            }).eq("id", key_id).execute()
         except Exception as e:
-            self.logger.error("Error logging API usage", error=str(e))
-            return False
+            self.logger.error("Error updating last used", error=str(e))
     
     @staticmethod
     def _hash_key(key: str) -> str:
@@ -370,20 +374,22 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
     @staticmethod
     def _format_key_data(data: dict) -> dict:
         """Formate les données de la base pour le modèle."""
+        # Extraire les données de l'agent si présentes (join)
+        agent_data = data.get("agents", {}) or {}
+        
         return {
             "id": data["id"],
+            "agent_id": data["agent_id"],
             "name": data["name"],
             "prefix": data["key_prefix"],
             "scopes": data["scopes"] or [],
             "rate_limit_per_minute": data["rate_limit_per_minute"],
-            "monthly_quota": data.get("monthly_quota", 0),
-            "monthly_usage": data.get("monthly_usage", 0),
             "is_active": data["is_active"],
             "expires_at": data.get("expires_at"),
             "last_used_at": data.get("last_used_at"),
-            "created_at": data["created_at"],
-            # Agent config fields
-            "agent_model_id": data.get("model_id", "mistral-large-latest"),
-            "agent_name": data.get("agent_name"),
-            "rag_enabled": data.get("rag_enabled", True),
+            "created_at": data.get("created_at"),
+            # Données de l'agent (depuis le join ou valeurs par défaut)
+            "agent_name": agent_data.get("name"),
+            "agent_model_id": agent_data.get("model_id", "mistral-large-latest"),
+            "rag_enabled": agent_data.get("rag_enabled", True),
         }

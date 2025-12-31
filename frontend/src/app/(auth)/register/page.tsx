@@ -1,15 +1,15 @@
 /**
  * Register Page
  * ==============
- * 
- * Page d'inscription avec authentification OAuth.
+ *
+ * Page d'inscription avec authentification OAuth et Email.
  * Design moderne et premium avec mise en avant des avantages.
  */
 
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { RegisterForm } from "@/components/auth/register-form";
 
 export const metadata = {
@@ -19,8 +19,10 @@ export const metadata = {
 
 export default async function RegisterPage() {
   // Rediriger si déjà connecté
-  const session = await auth();
-  if (session?.user) {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (user) {
     redirect("/dashboard");
   }
 

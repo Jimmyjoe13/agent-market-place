@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useAuth } from '@/hooks/useAuth';
 import { useAgentConfigManager } from '@/hooks/useAgentConfig';
 import { 
   Card, 
@@ -67,14 +67,14 @@ export default function AgentConfigPanel({
     isUpdating, 
     updateConfig 
   } = useAgentConfigManager();
-  const { data: session } = useSession();
+  const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const userPlan = (session?.user as any)?.plan || 'free';
+  const userPlan = user?.user_metadata?.plan || 'free';
   const isPremium = userPlan !== 'free';
 
   // État local pour les modifications non sauvegardées

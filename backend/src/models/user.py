@@ -1,13 +1,17 @@
 """
-User Model
-===========
+User / Profile Model
+=====================
 
-Modèles Pydantic pour la gestion des utilisateurs OAuth.
+Modèles Pydantic pour la gestion des profils utilisateurs.
 
 Ce module définit les structures de données pour :
-- Création et mise à jour d'utilisateurs
+- Création et mise à jour de profils
 - Profil utilisateur avec subscription
 - Validation OAuth
+
+Architecture v2:
+- La table s'appelle désormais `profiles` et est liée à `auth.users`
+- Création automatique par trigger lors de l'inscription
 """
 
 from datetime import datetime
@@ -35,57 +39,38 @@ class OAuthProvider(str, Enum):
     SYSTEM = "system"
 
 
-class UserCreate(BaseModel):
+class ProfileCreate(BaseModel):
     """
-    Schéma pour la création d'un utilisateur via OAuth.
+    Schéma pour la création d'un profil via OAuth.
     
-    Attributes:
-        email: Email de l'utilisateur (identifiant principal).
-        name: Nom d'affichage.
-        avatar_url: URL de la photo de profil.
-        provider: Provider OAuth utilisé.
-        provider_id: ID unique du provider.
+    Note: En v2, les profils sont créés automatiquement par trigger
+    lors de l'inscription via auth.users. Ce schéma est utilisé
+    principalement pour les mises à jour initiales.
     """
     
-    email: EmailStr = Field(
-        ...,
-        description="Email de l'utilisateur",
-    )
-    name: str | None = Field(
-        default=None,
-        description="Nom d'affichage",
-        max_length=255,
-    )
-    avatar_url: str | None = Field(
-        default=None,
-        description="URL de la photo de profil",
-    )
-    provider: OAuthProvider = Field(
-        default=OAuthProvider.EMAIL,
-        description="Provider OAuth",
-    )
-    provider_id: str | None = Field(
-        default=None,
-        description="ID unique du provider",
-    )
+    email: EmailStr = Field(..., description="Email de l'utilisateur")
+    name: str | None = Field(default=None, max_length=255)
+    avatar_url: str | None = Field(default=None)
+    provider: OAuthProvider = Field(default=OAuthProvider.EMAIL)
+    provider_id: str | None = Field(default=None)
 
 
-class UserUpdate(BaseModel):
-    """Schéma pour la mise à jour d'un utilisateur."""
+class ProfileUpdate(BaseModel):
+    """Schéma pour la mise à jour d'un profil."""
     
     name: str | None = Field(default=None, max_length=255)
     avatar_url: str | None = None
     provider_keys: dict[str, str] | None = None
 
 
-class UserInfo(BaseModel):
+class ProfileInfo(BaseModel):
     """
-    Informations utilisateur (sans données sensibles).
+    Informations profil (sans données sensibles).
     
     Utilisé pour les réponses API.
     """
     
-    id: UUID = Field(..., description="Identifiant unique")
+    id: UUID = Field(..., description="Identifiant unique (= auth.users.id)")
     email: EmailStr = Field(..., description="Email")
     name: str | None = Field(default=None, description="Nom d'affichage")
     avatar_url: str | None = Field(default=None, description="Photo de profil")
@@ -94,16 +79,21 @@ class UserInfo(BaseModel):
     email_verified: bool = Field(default=False, description="Email vérifié")
     created_at: datetime = Field(..., description="Date de création")
     last_login_at: datetime | None = Field(default=None, description="Dernière connexion")
-    provider_keys_summary: dict[str, bool] = Field(default_factory=dict, description="Résumé des clés BYOK configurées")
+    
+    # BYOK summary
+    provider_keys_summary: dict[str, bool] = Field(
+        default_factory=dict,
+        description="Résumé des clés BYOK configurées (provider: bool)",
+    )
     
     model_config = {"from_attributes": True}
 
 
-class UserWithSubscription(UserInfo):
+class ProfileWithSubscription(ProfileInfo):
     """
-    Utilisateur avec informations d'abonnement.
+    Profil avec informations d'abonnement.
     
-    Utilisé pour le profil complet dans le dashboard.
+    Utilisé pour le dashboard complet.
     """
     
     plan_slug: str = Field(default="free", description="Plan actif")
@@ -119,6 +109,8 @@ class UserWithSubscription(UserInfo):
     documents_limit: int = Field(default=10, description="Limite documents")
     api_keys_used: int = Field(default=0, description="Clés API créées")
     api_keys_limit: int = Field(default=1, description="Limite clés")
+    agents_used: int = Field(default=0, description="Agents créés")
+    agents_limit: int = Field(default=1, description="Limite agents")
 
 
 class OAuthCallback(BaseModel):
@@ -140,7 +132,7 @@ class OAuthTokenResponse(BaseModel):
     token_type: str = Field(default="Bearer", description="Type de token")
     expires_in: int = Field(..., description="Expiration en secondes")
     refresh_token: str | None = Field(default=None, description="Token de refresh")
-    user: UserInfo = Field(..., description="Informations utilisateur")
+    user: ProfileInfo = Field(..., description="Informations utilisateur")
 
 
 class SessionInfo(BaseModel):
@@ -153,3 +145,21 @@ class SessionInfo(BaseModel):
     role: UserRole = Field(default=UserRole.USER, description="Rôle")
     plan_slug: str = Field(default="free", description="Plan actif")
     expires_at: datetime = Field(..., description="Expiration session")
+
+
+# ==========================================
+# Backward Compatibility Aliases
+# Ces alias sont conservés pour ne pas casser le code existant
+# ==========================================
+
+# UserCreate est un alias de ProfileCreate
+UserCreate = ProfileCreate
+
+# UserUpdate est un alias de ProfileUpdate  
+UserUpdate = ProfileUpdate
+
+# UserInfo est un alias de ProfileInfo
+UserInfo = ProfileInfo
+
+# UserWithSubscription est un alias de ProfileWithSubscription
+UserWithSubscription = ProfileWithSubscription

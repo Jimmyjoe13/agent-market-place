@@ -94,6 +94,10 @@ class Settings(BaseSettings):
         default="http://localhost:3000",
         description="URL du frontend (pour les redirections OAuth)",
     )
+    supabase_jwt_secret: str = Field(
+        default="",
+        description="Secret JWT Supabase pour validation des tokens",
+    )
     
     # ===== Stripe Settings (Monetization) =====
     stripe_secret_key: str = Field(

@@ -1,46 +1,54 @@
 """
-User Repository
-================
+Profile Repository (formerly User Repository)
+===============================================
 
-Repository pour la gestion des utilisateurs dans Supabase.
+Repository pour la gestion des profils utilisateurs dans Supabase.
 
-Ce module fournit les opérations CRUD pour les utilisateurs :
-- Création via OAuth (Google, GitHub)
+Ce module fournit les opérations CRUD pour les profils :
+- Synchronisation avec auth.users (via trigger)
 - Récupération par email ou provider_id
 - Mise à jour du profil et dernière connexion
 
-Example:
-    >>> from src.repositories.user_repository import UserRepository
-    >>> repo = UserRepository()
-    >>> user = repo.get_or_create_oauth_user("user@example.com", "Google User", "google", "123456")
+Architecture v2:
+- La table `profiles` est liée à `auth.users` par FK cascade
+- Les profils sont créés automatiquement par trigger lors de l'inscription
+- Ce repository gère les updates et les reads
 """
 
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from src.models.user import UserCreate, UserInfo, UserWithSubscription, OAuthProvider
+from src.models.user import (
+    ProfileInfo as UserInfo,
+    ProfileWithSubscription as UserWithSubscription,
+    OAuthProvider,
+)
 from src.repositories.base import BaseRepository
 from src.utils.encryption import encrypt_value, decrypt_value
 
 
 class UserRepository(BaseRepository[UserInfo]):
     """
-    Repository pour les opérations sur les utilisateurs.
+    Repository pour les opérations sur les profils utilisateurs.
     
-    Gère la création OAuth, mise à jour et récupération des utilisateurs.
+    Note: Renommé "ProfileRepository" serait plus précis, mais on garde
+    "UserRepository" pour la rétro-compatibilité.
+    
+    La table sous-jacente est `profiles` (pas `users`).
     """
     
     def __init__(self) -> None:
-        """Initialise le repository users."""
-        super().__init__("users")
+        """Initialise le repository profiles."""
+        # Important: la table est maintenant "profiles" pas "users"
+        super().__init__("profiles")
     
     def get_by_id(self, id: str) -> UserInfo | None:
         """
-        Récupère un utilisateur par son ID.
+        Récupère un profil par son ID.
         
         Args:
-            id: UUID de l'utilisateur.
+            id: UUID du profil (= auth.users.id).
             
         Returns:
             UserInfo ou None si non trouvé.
@@ -54,25 +62,27 @@ class UserRepository(BaseRepository[UserInfo]):
                 .execute()
             )
             if response.data:
-                return UserInfo(**response.data)
+                return self._map_to_user_info(response.data)
             return None
         except Exception as e:
-            self.logger.error("Error fetching user", id=id, error=str(e))
+            self.logger.error("Error fetching profile", id=id, error=str(e))
             return None
 
     def _map_to_user_info(self, data: dict[str, Any]) -> UserInfo:
-        """Ajoute le résumé des clés BYOK au UserInfo."""
-        keys = data.get("provider_keys", {}) or {}
-        summary = {k: bool(v) for k, v in keys.items()}
-        # On ne passe pas provider_keys au constructeur car il n'est pas dans le modèle UserInfo
+        """Convertit les données brutes en UserInfo avec résumé BYOK."""
+        # Gérer les clés BYOK chiffrées
+        encrypted_keys = data.get("provider_keys_encrypted", {}) or {}
+        summary = {k: bool(v) for k, v in encrypted_keys.items()}
+        
+        # Créer une copie sans les champs internes
         data_copy = data.copy()
-        if "provider_keys" in data_copy:
-            del data_copy["provider_keys"]
+        data_copy.pop("provider_keys_encrypted", None)
+        
         return UserInfo(**data_copy, provider_keys_summary=summary)
     
     def get_by_email(self, email: str) -> UserInfo | None:
         """
-        Récupère un utilisateur par email.
+        Récupère un profil par email.
         
         Args:
             email: Email de l'utilisateur.
@@ -89,15 +99,15 @@ class UserRepository(BaseRepository[UserInfo]):
                 .execute()
             )
             if response.data:
-                return UserInfo(**response.data)
+                return self._map_to_user_info(response.data)
             return None
         except Exception as e:
-            self.logger.debug("User not found by email", email=email)
+            self.logger.debug("Profile not found by email", email=email)
             return None
     
     def get_by_provider(self, provider: str, provider_id: str) -> UserInfo | None:
         """
-        Récupère un utilisateur par provider OAuth.
+        Récupère un profil par provider OAuth.
         
         Args:
             provider: Provider OAuth (google, github).
@@ -116,54 +126,59 @@ class UserRepository(BaseRepository[UserInfo]):
                 .execute()
             )
             if response.data:
-                return UserInfo(**response.data)
+                return self._map_to_user_info(response.data)
             return None
         except Exception as e:
-            self.logger.debug("User not found by provider", provider=provider)
+            self.logger.debug("Profile not found by provider", provider=provider)
             return None
     
     def create(self, data: dict[str, Any]) -> UserInfo:
         """
-        Crée un nouvel utilisateur.
+        Crée ou met à jour un profil.
+        
+        Note: En v2, les profils sont créés automatiquement par trigger
+        lors de l'inscription. Cette méthode est surtout utilisée pour
+        les tests ou les cas spéciaux.
         
         Args:
-            data: Données de l'utilisateur.
+            data: Données du profil.
             
         Returns:
             UserInfo créé.
         """
-        # Normaliser l'email
         if "email" in data:
             data["email"] = data["email"].lower()
         
-        response = self.table.insert(data).execute()
-        user = UserInfo(**response.data[0])
+        response = self.table.upsert(data).execute()
+        user = self._map_to_user_info(response.data[0])
         
         self.logger.info(
-            "User created",
+            "Profile created/updated",
             user_id=str(user.id),
             email=user.email,
-            provider=user.provider,
         )
         
         return user
     
     def delete(self, id: str) -> bool:
         """
-        Supprime un utilisateur.
+        Supprime un profil.
+        
+        Note: Ceci ne supprime pas auth.users. Pour supprimer complètement
+        un utilisateur, il faut utiliser l'API admin Supabase.
         
         Args:
-            id: UUID de l'utilisateur.
+            id: UUID du profil.
             
         Returns:
             True si supprimé avec succès.
         """
         try:
             self.table.delete().eq("id", id).execute()
-            self.logger.info("User deleted", id=id)
+            self.logger.info("Profile deleted", id=id)
             return True
         except Exception as e:
-            self.logger.error("Error deleting user", error=str(e))
+            self.logger.error("Error deleting profile", error=str(e))
             return False
     
     def get_or_create_oauth_user(
@@ -175,12 +190,13 @@ class UserRepository(BaseRepository[UserInfo]):
         avatar_url: str | None = None,
     ) -> UserInfo:
         """
-        Récupère ou crée un utilisateur OAuth.
+        Récupère ou met à jour un profil OAuth.
         
-        Utilisé lors du callback OAuth pour :
-        1. Vérifier si l'utilisateur existe (par provider_id ou email)
-        2. Le créer si non existant
-        3. Mettre à jour last_login_at
+        En v2, les profils sont créés par trigger lors de l'inscription.
+        Cette méthode :
+        1. Cherche un profil existant
+        2. Le met à jour avec les infos OAuth
+        3. Met à jour last_login_at
         
         Args:
             email: Email de l'utilisateur.
@@ -190,52 +206,65 @@ class UserRepository(BaseRepository[UserInfo]):
             avatar_url: URL de l'avatar.
             
         Returns:
-            UserInfo existant ou nouvellement créé.
+            UserInfo existant ou mis à jour.
         """
-        # 1. Chercher par provider_id
-        user = self.get_by_provider(provider, provider_id)
-        
-        if user:
-            # Mettre à jour last_login_at
-            self.update_last_login(str(user.id))
-            return user
-        
-        # 2. Chercher par email (cas du merge de comptes)
+        # 1. Chercher par email (car le trigger a déjà créé le profil)
         user = self.get_by_email(email)
         
         if user:
-            # Mettre à jour le provider_id si différent
-            if user.provider != provider:
-                self.logger.warning(
-                    "User exists with different provider",
-                    existing_provider=user.provider,
-                    new_provider=provider,
-                )
-            self.update_last_login(str(user.id))
-            return user
+            # Mettre à jour les infos OAuth et last_login
+            update_data = {
+                "provider": provider,
+                "provider_id": provider_id,
+                "last_login_at": datetime.utcnow().isoformat(),
+                "email_verified": True,
+            }
+            if name:
+                update_data["name"] = name
+            if avatar_url:
+                update_data["avatar_url"] = avatar_url
+            
+            self.table.update(update_data).eq("id", str(user.id)).execute()
+            
+            # Créer subscription Free si pas encore fait
+            self._ensure_subscription(str(user.id))
+            
+            return self.get_by_id(str(user.id)) or user
         
-        # 3. Créer un nouvel utilisateur
+        # 2. Fallback: créer le profil (cas rare, trigger devrait l'avoir fait)
+        self.logger.warning("Profile not found, creating manually", email=email)
+        
         user_data = {
             "email": email.lower(),
             "name": name,
             "avatar_url": avatar_url,
             "provider": provider,
             "provider_id": provider_id,
-            "email_verified": True,  # Vérifié par OAuth provider
+            "email_verified": True,
             "last_login_at": datetime.utcnow().isoformat(),
         }
         
         user = self.create(user_data)
-        
-        # Créer la subscription Free par défaut
-        self._create_default_subscription(str(user.id))
+        self._ensure_subscription(str(user.id))
         
         return user
     
-    def _create_default_subscription(self, user_id: str) -> None:
-        """Crée un abonnement Free pour un nouvel utilisateur."""
+    def _ensure_subscription(self, user_id: str) -> None:
+        """S'assure qu'un utilisateur a une subscription active."""
         try:
-            # Récupérer le plan Free
+            # Vérifier si une subscription existe
+            sub_check = (
+                self.client.table("subscriptions")
+                .select("id")
+                .eq("user_id", user_id)
+                .eq("status", "active")
+                .execute()
+            )
+            
+            if sub_check.data:
+                return  # Déjà une subscription
+            
+            # Créer une subscription Free
             plan_response = (
                 self.client.table("plans")
                 .select("id")
@@ -254,7 +283,7 @@ class UserRepository(BaseRepository[UserInfo]):
                 
                 self.logger.info("Default subscription created", user_id=user_id)
         except Exception as e:
-            self.logger.error("Error creating default subscription", error=str(e))
+            self.logger.error("Error ensuring subscription", error=str(e))
     
     def update_last_login(self, user_id: str) -> None:
         """Met à jour la date de dernière connexion."""
@@ -279,6 +308,7 @@ class UserRepository(BaseRepository[UserInfo]):
             user_id: UUID de l'utilisateur.
             name: Nouveau nom (si fourni).
             avatar_url: Nouvelle URL avatar (si fourni).
+            provider_keys: Clés BYOK à mettre à jour.
             
         Returns:
             UserInfo mis à jour ou None si erreur.
@@ -289,9 +319,16 @@ class UserRepository(BaseRepository[UserInfo]):
         if avatar_url is not None:
             update_data["avatar_url"] = avatar_url
         if provider_keys is not None:
-            # Récupérer les clés actuelles pour fusionner
-            current_user_data = self.table.select("provider_keys").eq("id", user_id).single().execute().data
-            current_keys = (current_user_data.get("provider_keys") or {}) if current_user_data else {}
+            # Récupérer les clés actuelles
+            current_data = (
+                self.table
+                .select("provider_keys_encrypted")
+                .eq("id", user_id)
+                .single()
+                .execute()
+                .data
+            )
+            current_keys = (current_data.get("provider_keys_encrypted") or {}) if current_data else {}
             
             # Chiffrer et mettre à jour
             for provider, key in provider_keys.items():
@@ -300,7 +337,7 @@ class UserRepository(BaseRepository[UserInfo]):
                 elif provider in current_keys:
                     del current_keys[provider]
             
-            update_data["provider_keys"] = current_keys
+            update_data["provider_keys_encrypted"] = current_keys
         
         if not update_data:
             return self.get_by_id(user_id)
@@ -321,7 +358,7 @@ class UserRepository(BaseRepository[UserInfo]):
     
     def get_user_with_subscription(self, user_id: str) -> UserWithSubscription | None:
         """
-        Récupère un utilisateur avec ses informations d'abonnement.
+        Récupère un profil avec ses informations d'abonnement.
         
         Args:
             user_id: UUID de l'utilisateur.
@@ -330,24 +367,21 @@ class UserRepository(BaseRepository[UserInfo]):
             UserWithSubscription ou None si non trouvé.
         """
         try:
-            # Récupérer les données brutes de l'utilisateur (inclut plan_slug, subscription_status)
-            user_response = self.table.select("*").eq("id", user_id).single().execute()
-            if not user_response.data:
-                return None
-            user_data = user_response.data
-            
-            # Récupérer l'utilisateur comme objet UserInfo
-            user = self.get_by_id(user_id)
-            if not user:
+            # Récupérer le profil
+            profile_response = self.table.select("*").eq("id", user_id).single().execute()
+            if not profile_response.data:
                 return None
             
-            # Récupérer l'usage
-            response = self.client.rpc("get_user_usage", {
+            profile_data = profile_response.data
+            user = self._map_to_user_info(profile_data)
+            
+            # Récupérer l'usage via RPC
+            usage_response = self.client.rpc("get_user_usage", {
                 "p_user_id": user_id,
             }).execute()
-            usage_data = response.data[0] if response.data else {}
+            usage_data = usage_response.data[0] if usage_response.data else {}
             
-            # Récupérer les infos subscription (optionnel, pour la compatibilité)
+            # Récupérer les infos subscription
             sub_response = (
                 self.client.table("subscriptions")
                 .select("*, plans(*)")
@@ -360,12 +394,10 @@ class UserRepository(BaseRepository[UserInfo]):
             sub_data = sub_response.data if sub_response.data else {}
             plan_data = sub_data.get("plans", {}) if sub_data else {}
             
-            # Priorité : lire plan_slug directement depuis users (mis à jour par Stripe webhook)
-            # Fallback : lire depuis subscriptions/plans
-            effective_plan_slug = user_data.get("plan_slug") or plan_data.get("slug", "free")
-            effective_status = user_data.get("subscription_status") or sub_data.get("status", "inactive")
+            # Priorité: lire depuis le profil (mis à jour par webhook Stripe)
+            effective_plan_slug = profile_data.get("plan_slug") or plan_data.get("slug", "free")
+            effective_status = profile_data.get("subscription_status") or sub_data.get("status", "inactive")
             
-            # Déterminer le nom du plan à partir du slug
             plan_name_map = {"free": "Free", "pro": "Pro", "enterprise": "Enterprise"}
             effective_plan_name = plan_data.get("name") or plan_name_map.get(effective_plan_slug, "Free")
             
@@ -382,7 +414,43 @@ class UserRepository(BaseRepository[UserInfo]):
                 documents_limit=usage_data.get("documents_limit", 10),
                 api_keys_used=usage_data.get("api_keys_count", 0),
                 api_keys_limit=usage_data.get("api_keys_limit", 1),
+                agents_used=usage_data.get("agents_count", 0),
+                agents_limit=usage_data.get("agents_limit", 1),
             )
         except Exception as e:
             self.logger.error("Error getting user with subscription", error=str(e))
             return None
+    
+    def get_byok_key(self, user_id: str, provider: str) -> str | None:
+        """
+        Récupère une clé BYOK déchiffrée pour un provider.
+        
+        Args:
+            user_id: UUID de l'utilisateur.
+            provider: Nom du provider (openai, anthropic, etc.).
+            
+        Returns:
+            Clé déchiffrée ou None.
+        """
+        try:
+            response = (
+                self.table
+                .select("provider_keys_encrypted")
+                .eq("id", user_id)
+                .single()
+                .execute()
+            )
+            
+            if response.data:
+                encrypted_keys = response.data.get("provider_keys_encrypted", {}) or {}
+                encrypted_key = encrypted_keys.get(provider)
+                if encrypted_key:
+                    return decrypt_value(encrypted_key)
+            return None
+        except Exception as e:
+            self.logger.error("Error getting BYOK key", error=str(e))
+            return None
+
+
+# Alias pour clarté
+ProfileRepository = UserRepository

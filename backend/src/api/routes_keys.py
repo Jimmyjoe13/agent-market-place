@@ -2,27 +2,34 @@
 API Routes - Key Management
 ============================
 
-Endpoints pour la gestion avancée des clés API:
-- Rotation de clé (régénération sans perte de données)
-- Configuration des limites de budget
+Endpoints pour la gestion des clés API:
+- CRUD des clés API (liées à un agent)
+- Rotation de clé
 - Statistiques d'utilisation
+
+Architecture v2:
+- Chaque clé API est liée à un agent
+- Les limites de budget sont sur l'agent
 """
 
 import hashlib
 import secrets
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from src.api.auth import require_scope, ApiKeyValidation
+from src.api.deps import get_current_user, get_agent_repo, get_api_key_repo
 from src.config.logging_config import get_logger
+from src.models.api_key import ApiKeyCreate, ApiKeyResponse, ApiKeyInfo, ApiKeyListResponse
+from src.models.user import UserWithSubscription
+from src.repositories.agent_repository import AgentRepository
 from src.repositories.api_key_repository import ApiKeyRepository
-from src.services.rate_limiter import get_rate_limiter
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/keys", tags=["Key Management"])
+router = APIRouter(prefix="/keys", tags=["API Keys"])
 
 
 # ============================================
@@ -40,287 +47,295 @@ class KeyRotateResponse(BaseModel):
     )
 
 
-class BudgetLimitsUpdate(BaseModel):
-    """Mise à jour des limites de budget."""
-    max_monthly_tokens: Optional[int] = Field(
-        None, 
-        ge=0, 
-        description="Limite tokens/mois (0 = illimité)"
-    )
-    max_daily_requests: Optional[int] = Field(
-        None, 
-        ge=0, 
-        description="Limite requêtes/jour (0 = illimité)"
-    )
-    system_prompt_max_length: Optional[int] = Field(
-        None, 
-        ge=100, 
-        le=32000,
-        description="Taille max du prompt système (100-32000)"
-    )
-
-
-class BudgetLimitsResponse(BaseModel):
-    """Réponse avec les limites de budget."""
-    max_monthly_tokens: int
-    max_daily_requests: int
-    tokens_used_this_month: int
-    requests_today: int
-    system_prompt_max_length: int
-    usage_percent: float = Field(..., description="Pourcentage d'utilisation tokens")
-
-
 class UsageStatsResponse(BaseModel):
     """Statistiques d'utilisation."""
     key_id: str
+    agent_id: str
     agent_name: Optional[str]
-    tokens_used_this_month: int
-    max_monthly_tokens: int
-    requests_today: int
-    max_daily_requests: int
-    rate_limit_stats: dict
-    usage_reset_month: Optional[str]
-    daily_reset_date: Optional[str]
+    total_requests: int
+    avg_response_time: Optional[float]
+    error_rate: float
+    requests_by_day: dict
 
 
 # ============================================
-# Dependencies
+# CRUD Endpoints
 # ============================================
 
-def get_key_repo() -> ApiKeyRepository:
-    """Retourne une instance du repository."""
-    return ApiKeyRepository()
+@router.get("", response_model=ApiKeyListResponse)
+async def list_keys(
+    agent_id: UUID | None = None,
+    page: int = 1,
+    per_page: int = 20,
+    user: UserWithSubscription = Depends(get_current_user),
+    repo: ApiKeyRepository = Depends(get_api_key_repo),
+):
+    """
+    Liste les clés API de l'utilisateur.
+    
+    Args:
+        agent_id: Filtrer par agent (optionnel).
+        page: Numéro de page.
+        per_page: Résultats par page.
+        
+    Returns:
+        Liste des clés API.
+    """
+    keys, total = repo.list_keys(
+        user_id=str(user.id),
+        agent_id=str(agent_id) if agent_id else None,
+        page=page,
+        per_page=per_page,
+    )
+    
+    return ApiKeyListResponse(
+        keys=keys,
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.post("", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
+async def create_key(
+    key_data: ApiKeyCreate,
+    user: UserWithSubscription = Depends(get_current_user),
+    api_key_repo: ApiKeyRepository = Depends(get_api_key_repo),
+    agent_repo: AgentRepository = Depends(get_agent_repo),
+):
+    """
+    Crée une nouvelle clé API.
+    
+    Si agent_id n'est pas fourni, utilise l'agent par défaut de l'utilisateur
+    (ou en crée un si aucun n'existe).
+    
+    ⚠️ La clé complète n'est retournée qu'une seule fois.
+    
+    Args:
+        key_data: Configuration de la clé.
+        
+    Returns:
+        Clé API créée avec le secret.
+    """
+    # Vérifier la limite de clés API
+    current_count = api_key_repo.count_user_keys(str(user.id))
+    if user.api_keys_limit > 0 and current_count >= user.api_keys_limit:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "api_keys_limit_reached",
+                "message": f"Limite de {user.api_keys_limit} clés API atteinte. Passez au plan supérieur.",
+                "current": current_count,
+                "limit": user.api_keys_limit,
+            }
+        )
+    
+    # Déterminer l'agent
+    if key_data.agent_id:
+        # Vérifier que l'agent existe et appartient à l'utilisateur
+        agent = agent_repo.get_by_id(str(key_data.agent_id))
+        if not agent or agent.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Agent not found",
+            )
+        agent_id = str(key_data.agent_id)
+    else:
+        # Utiliser ou créer l'agent par défaut
+        agent = agent_repo.get_or_create_default_agent(str(user.id))
+        agent_id = str(agent.id)
+    
+    # Créer la clé
+    result = api_key_repo.create({
+        "name": key_data.name,
+        "agent_id": agent_id,
+        "user_id": str(user.id),
+        "scopes": [s.value for s in key_data.scopes],
+        "rate_limit_per_minute": key_data.rate_limit_per_minute,
+        "expires_in_days": key_data.expires_in_days,
+    })
+    
+    logger.info(
+        "API key created",
+        key_id=result["id"],
+        agent_id=agent_id,
+        user_id=str(user.id),
+    )
+    
+    return ApiKeyResponse(
+        id=result["id"],
+        agent_id=agent_id,
+        name=result["name"],
+        key=result["key"],
+        prefix=result["prefix"],
+        scopes=result["scopes"],
+        rate_limit_per_minute=result["rate_limit_per_minute"],
+        expires_at=result.get("expires_at"),
+        is_active=result["is_active"],
+        created_at=result["created_at"],
+    )
+
+
+@router.get("/{key_id}", response_model=ApiKeyInfo)
+async def get_key(
+    key_id: UUID,
+    user: UserWithSubscription = Depends(get_current_user),
+    repo: ApiKeyRepository = Depends(get_api_key_repo),
+):
+    """
+    Récupère les détails d'une clé API.
+    
+    Args:
+        key_id: UUID de la clé.
+        
+    Returns:
+        Informations de la clé (sans le secret).
+    """
+    key = repo.get_by_id(str(key_id))
+    
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
+        )
+    
+    # Vérifier la propriété via user_id sur la clé ou l'agent
+    # Note: le user_id est maintenant sur la clé directement
+    keys, _ = repo.list_keys(user_id=str(user.id))
+    if not any(k.id == key.id for k in keys):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
+        )
+    
+    return key
+
+
+@router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_key(
+    key_id: UUID,
+    user: UserWithSubscription = Depends(get_current_user),
+    repo: ApiKeyRepository = Depends(get_api_key_repo),
+):
+    """
+    Révoque une clé API (désactivation, pas suppression).
+    
+    Args:
+        key_id: UUID de la clé.
+    """
+    # Vérifier la propriété
+    keys, _ = repo.list_keys(user_id=str(user.id), include_inactive=True)
+    if not any(str(k.id) == str(key_id) for k in keys):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
+        )
+    
+    success = repo.revoke(str(key_id))
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to revoke key",
+        )
+    
+    logger.info("API key revoked", key_id=str(key_id), user_id=str(user.id))
 
 
 # ============================================
-# Helper Functions
-# ============================================
-
-def generate_api_key() -> str:
-    """Génère une nouvelle clé API sécurisée."""
-    # Format: rag_<32 caractères hex>
-    random_bytes = secrets.token_bytes(16)
-    return f"rag_{random_bytes.hex()}"
-
-
-def hash_api_key(key: str) -> str:
-    """Hash une clé API avec SHA-256."""
-    return hashlib.sha256(key.encode()).hexdigest()
-
-
-# ============================================
-# Endpoints
+# Advanced Operations
 # ============================================
 
 @router.post("/{key_id}/rotate", response_model=KeyRotateResponse)
-async def rotate_api_key(
-    key_id: str,
-    api_key: ApiKeyValidation = Depends(require_scope("admin")),
-    repo: ApiKeyRepository = Depends(get_key_repo),
+async def rotate_key(
+    key_id: UUID,
+    user: UserWithSubscription = Depends(get_current_user),
+    repo: ApiKeyRepository = Depends(get_api_key_repo),
 ):
     """
-    Régénère une clé API sans perdre la configuration ni les documents.
+    Régénère une clé API sans perdre la configuration.
     
     Cette opération:
     - Génère une nouvelle clé avec un nouveau hash
     - Invalide immédiatement l'ancienne clé
-    - Préserve tous les documents et configurations de l'agent
+    - Préserve tous les paramètres et l'agent associé
     
     ⚠️ La nouvelle clé ne sera affichée qu'une seule fois.
     """
-    try:
-        # Vérifier que la clé appartient à l'utilisateur
-        key_data = repo.get_by_id(key_id)
-        
-        if not key_data or str(key_data.get("user_id")) != str(api_key.user_id):
-            raise HTTPException(
-                status_code=404,
-                detail="Clé API non trouvée ou accès non autorisé"
-            )
-        
-        # Générer nouvelle clé
-        new_key = generate_api_key()
-        new_hash = hash_api_key(new_key)
-        
-        # Mettre à jour le hash (garde le même ID!)
-        repo.client.table("api_keys").update({
-            "key_hash": new_hash,
-            "last_rotated_at": datetime.utcnow().isoformat(),
-        }).eq("id", key_id).execute()
-        
-        logger.info(
-            "API key rotated",
-            key_id=key_id,
-            user_id=str(api_key.user_id)
+    # Vérifier la propriété
+    keys, _ = repo.list_keys(user_id=str(user.id))
+    key = next((k for k in keys if str(k.id) == str(key_id)), None)
+    
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
         )
+    
+    try:
+        # Générer nouvelle clé
+        random_part = secrets.token_hex(16)
+        new_key = f"sk-proj-{random_part}"
+        new_hash = hashlib.sha256(new_key.encode()).hexdigest()
+        new_prefix = new_key[:12]
+        
+        # Mettre à jour le hash
+        repo.table.update({
+            "key_hash": new_hash,
+            "key_prefix": new_prefix,
+        }).eq("id", str(key_id)).execute()
+        
+        logger.info("API key rotated", key_id=str(key_id), user_id=str(user.id))
         
         return KeyRotateResponse(
             new_key=new_key,
-            key_id=key_id,
+            key_id=str(key_id),
             rotated_at=datetime.utcnow(),
         )
         
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error("Key rotation failed", error=str(e), key_id=key_id)
+        logger.error("Key rotation failed", error=str(e), key_id=str(key_id))
         raise HTTPException(
-            status_code=500,
-            detail="Erreur lors de la rotation de la clé"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to rotate key",
         )
-
-
-@router.get("/{key_id}/budget", response_model=BudgetLimitsResponse)
-async def get_budget_limits(
-    key_id: str,
-    api_key: ApiKeyValidation = Depends(require_scope("query")),
-    repo: ApiKeyRepository = Depends(get_key_repo),
-):
-    """
-    Récupère les limites de budget et l'utilisation actuelle.
-    """
-    try:
-        result = repo.client.table("api_keys").select(
-            "max_monthly_tokens",
-            "max_daily_requests",
-            "tokens_used_this_month",
-            "requests_today",
-            "system_prompt_max_length",
-            "user_id"
-        ).eq("id", key_id).single().execute()
-        
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Clé non trouvée")
-        
-        data = result.data
-        
-        # Vérifier la propriété
-        if str(data.get("user_id")) != str(api_key.user_id):
-            raise HTTPException(status_code=404, detail="Clé non trouvée")
-        
-        # Calcul du pourcentage d'utilisation
-        max_tokens = data.get("max_monthly_tokens") or 0
-        used_tokens = data.get("tokens_used_this_month") or 0
-        usage_percent = (used_tokens / max_tokens * 100) if max_tokens > 0 else 0
-        
-        return BudgetLimitsResponse(
-            max_monthly_tokens=max_tokens,
-            max_daily_requests=data.get("max_daily_requests") or 0,
-            tokens_used_this_month=used_tokens,
-            requests_today=data.get("requests_today") or 0,
-            system_prompt_max_length=data.get("system_prompt_max_length") or 4000,
-            usage_percent=round(usage_percent, 2)
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Get budget limits failed", error=str(e))
-        raise HTTPException(status_code=500, detail="Erreur serveur")
-
-
-@router.patch("/{key_id}/budget", response_model=BudgetLimitsResponse)
-async def update_budget_limits(
-    key_id: str,
-    limits: BudgetLimitsUpdate,
-    api_key: ApiKeyValidation = Depends(require_scope("admin")),
-    repo: ApiKeyRepository = Depends(get_key_repo),
-):
-    """
-    Met à jour les limites de budget d'une clé API.
-    
-    Seuls les champs fournis sont mis à jour.
-    """
-    try:
-        # Vérifier propriété
-        key_data = repo.get_by_id(key_id)
-        if not key_data or str(key_data.get("user_id")) != str(api_key.user_id):
-            raise HTTPException(status_code=404, detail="Clé non trouvée")
-        
-        # Construire les champs à mettre à jour
-        update_data = {}
-        if limits.max_monthly_tokens is not None:
-            update_data["max_monthly_tokens"] = limits.max_monthly_tokens
-        if limits.max_daily_requests is not None:
-            update_data["max_daily_requests"] = limits.max_daily_requests
-        if limits.system_prompt_max_length is not None:
-            update_data["system_prompt_max_length"] = limits.system_prompt_max_length
-        
-        if not update_data:
-            raise HTTPException(
-                status_code=400,
-                detail="Aucun champ à mettre à jour"
-            )
-        
-        # Mettre à jour
-        repo.client.table("api_keys").update(update_data).eq("id", key_id).execute()
-        
-        # Retourner les nouvelles valeurs
-        return await get_budget_limits(key_id, api_key, repo)
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Update budget limits failed", error=str(e))
-        raise HTTPException(status_code=500, detail="Erreur serveur")
 
 
 @router.get("/{key_id}/usage", response_model=UsageStatsResponse)
-async def get_usage_stats(
-    key_id: str,
-    api_key: ApiKeyValidation = Depends(require_scope("query")),
-    repo: ApiKeyRepository = Depends(get_key_repo),
+async def get_key_usage(
+    key_id: UUID,
+    days: int = 30,
+    user: UserWithSubscription = Depends(get_current_user),
+    repo: ApiKeyRepository = Depends(get_api_key_repo),
 ):
     """
-    Récupère les statistiques d'utilisation détaillées.
+    Récupère les statistiques d'utilisation d'une clé.
     
-    Inclut:
-    - Tokens utilisés ce mois
-    - Requêtes aujourd'hui
-    - Stats rate limiting en temps réel
+    Args:
+        key_id: UUID de la clé.
+        days: Période en jours (défaut: 30).
+        
+    Returns:
+        Statistiques d'utilisation.
     """
-    try:
-        rate_limiter = get_rate_limiter()
-        
-        # Données DB
-        result = repo.client.table("api_keys").select(
-            "id",
-            "agent_name",
-            "tokens_used_this_month",
-            "max_monthly_tokens",
-            "requests_today",
-            "max_daily_requests",
-            "usage_reset_month",
-            "daily_reset_date",
-            "user_id"
-        ).eq("id", key_id).single().execute()
-        
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Clé non trouvée")
-        
-        data = result.data
-        
-        # Vérifier propriété
-        if str(data.get("user_id")) != str(api_key.user_id):
-            raise HTTPException(status_code=404, detail="Clé non trouvée")
-        
-        # Stats rate limiting temps réel
-        rate_stats = await rate_limiter.get_usage_stats(key_id)
-        
-        return UsageStatsResponse(
-            key_id=key_id,
-            agent_name=data.get("agent_name"),
-            tokens_used_this_month=data.get("tokens_used_this_month") or 0,
-            max_monthly_tokens=data.get("max_monthly_tokens") or 0,
-            requests_today=data.get("requests_today") or 0,
-            max_daily_requests=data.get("max_daily_requests") or 0,
-            rate_limit_stats=rate_stats,
-            usage_reset_month=data.get("usage_reset_month"),
-            daily_reset_date=str(data.get("daily_reset_date")) if data.get("daily_reset_date") else None,
+    # Vérifier la propriété
+    keys, _ = repo.list_keys(user_id=str(user.id))
+    key = next((k for k in keys if str(k.id) == str(key_id)), None)
+    
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Key not found",
         )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Get usage stats failed", error=str(e))
-        raise HTTPException(status_code=500, detail="Erreur serveur")
+    
+    stats = repo.get_usage_stats(str(key_id), days=days)
+    
+    return UsageStatsResponse(
+        key_id=str(key_id),
+        agent_id=str(key.agent_id),
+        agent_name=key.agent_name,
+        total_requests=stats.total_requests if stats else 0,
+        avg_response_time=stats.avg_response_time if stats else None,
+        error_rate=stats.error_rate if stats else 0,
+        requests_by_day=stats.requests_by_day if stats else {},
+    )

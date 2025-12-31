@@ -1,11 +1,11 @@
 /**
  * Hook personnalisé pour la gestion self-service des clés API
- * Utilise React Query avec session utilisateur (pas de Master Key)
+ * Utilise React Query avec session Supabase
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import type { ApiKeyInfo, ApiKeyCreate, ApiKeyResponse } from "@/types/api";
 
@@ -27,15 +27,15 @@ interface CreateKeyInput extends Omit<ApiKeyCreate, "scopes"> {
 // ===== List User API Keys =====
 
 export function useUserApiKeys(options: UseUserApiKeysOptions = {}) {
-  const { data: session, status } = useSession();
-  const isAuthenticated = status === "authenticated";
+  const { session, loading } = useAuth();
+  const isAuthenticated = !!session && !loading;
 
   return useQuery({
     queryKey: userApiKeysQueryKey,
     queryFn: async () => {
-      // Passer le token d'accès si disponible
-      if (session?.accessToken) {
-        api.setAccessToken(session.accessToken);
+      // Passer le token d'accès Supabase
+      if (session?.access_token) {
+        api.setAccessToken(session.access_token);
       }
       return api.getUserApiKeys();
     },
@@ -49,12 +49,12 @@ export function useUserApiKeys(options: UseUserApiKeysOptions = {}) {
 
 export function useCreateUserApiKey() {
   const queryClient = useQueryClient();
-  const { data: session } = useSession();
+  const { session } = useAuth();
 
   return useMutation({
     mutationFn: async (input: CreateKeyInput): Promise<ApiKeyResponse> => {
-      if (session?.accessToken) {
-        api.setAccessToken(session.accessToken);
+      if (session?.access_token) {
+        api.setAccessToken(session.access_token);
       }
       
       const request: ApiKeyCreate = {
@@ -99,12 +99,12 @@ export function useCreateUserApiKey() {
 
 export function useRevokeUserApiKey() {
   const queryClient = useQueryClient();
-  const { data: session } = useSession();
+  const { session } = useAuth();
 
   return useMutation({
     mutationFn: async (keyId: string): Promise<void> => {
-      if (session?.accessToken) {
-        api.setAccessToken(session.accessToken);
+      if (session?.access_token) {
+        api.setAccessToken(session.access_token);
       }
       await api.revokeUserApiKey(keyId);
     },
@@ -139,7 +139,7 @@ export function useRevokeUserApiKey() {
 
 /**
  * Hook combiné pour la gestion complète des clés API utilisateur
- * Utilise la session NextAuth au lieu de la Master Key
+ * Utilise la session Supabase
  */
 export function useUserApiKeysManager() {
   const keysQuery = useUserApiKeys();

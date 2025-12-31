@@ -1,94 +1,92 @@
-# 📦 Database Migrations
+# Migrations SQL - Agent Market Place
 
-Ce répertoire contient les migrations SQL pour Supabase/PostgreSQL.
+## Structure
 
-## Migrations Disponibles
-
-| Fichier                   | Description                        | Dépendances |
-| ------------------------- | ---------------------------------- | ----------- |
-| `001_initial.sql`         | Schema initial (documents, users)  | -           |
-| `002_match_documents.sql` | Fonction RPC recherche vectorielle | pgvector    |
-| `003_api_keys.sql`        | Table api_keys + validation        | 001         |
-| `004_conversations.sql`   | Logging des conversations          | 001, 003    |
-| `005_feedback.sql`        | Système de feedback                | 004         |
-| `006_usage_logs.sql`      | Logs d'utilisation API             | 003         |
-| `007_subscriptions.sql`   | Gestion abonnements Stripe         | 001         |
-| **008_agent_config.sql**  | **Agent Marketplace v1**           | 003, 002    |
-
-## Migration 008: Agent Marketplace
-
-### Changements
-
-1. **Extension `api_keys`** : Nouveaux champs agent config
-
-   - `model_id` : Modèle LLM (varchar, défaut: mistral-large-latest)
-   - `system_prompt` : Prompt système personnalisé (text)
-   - `rag_enabled` : Activer/désactiver RAG (boolean, défaut: true)
-   - `agent_name` : Nom affiché de l'agent (varchar)
-
-2. **Extension `documents`** : Isolation par agent
-
-   - `api_key_id` : FK vers api_keys avec CASCADE delete
-
-3. **Mise à jour `match_documents`** : Filtre par api_key_id
-
-4. **Mise à jour `validate_api_key`** : Retourne la config agent
-
-### Application
-
-#### Option 1: Supabase CLI (Recommandé)
-
-```bash
-# Depuis la racine du projet
-supabase db push
-
-# Ou migration spécifique
-supabase migration apply --local
+```
+migrations/
+├── 001_init_schema.sql     # Schéma consolidé v2.0.0
+├── archive/                 # Anciennes migrations (001-012)
+└── README.md               # Ce fichier
 ```
 
-#### Option 2: Supabase Studio
+## Version 2.0.0 (2025-12-31)
 
-1. Aller sur https://app.supabase.com/project/[PROJECT_ID]/sql
-2. Copier-coller le contenu de `008_agent_config.sql`
-3. Exécuter
+### Breaking Changes
 
-#### Option 3: psql
+Cette version repart de zéro avec un schéma restructuré :
 
-```bash
-psql $DATABASE_URL < backend/scripts/migrations/008_agent_config.sql
-```
+1. **`profiles` remplace `users`**
 
-### Rollback
+   - Lié directement à `auth.users` via FK cascade
+   - Création automatique par trigger lors de l'inscription
 
-En cas de problème, exécuter:
+2. **`agents` séparé de `api_keys`**
+
+   - `agents` : configuration LLM (modèle, prompt, RAG, budget)
+   - `api_keys` : authentification pure (hash, scopes, rate limit)
+   - Relation 1-N : un agent peut avoir plusieurs clés API
+
+3. **RLS complète**
+   - Toutes les tables ont des policies
+   - Utilise `auth.uid()` qui correspond maintenant à `profiles.id`
+
+### Tables
+
+| Table           | Description                                      |
+| --------------- | ------------------------------------------------ |
+| `profiles`      | Extension de auth.users (identité, Stripe, BYOK) |
+| `plans`         | Plans d'abonnement (Free, Pro, Enterprise)       |
+| `subscriptions` | Abonnements avec intégration Stripe              |
+| `agents`        | Configuration des agents IA                      |
+| `api_keys`      | Clés API liées aux agents                        |
+| `documents`     | Documents vectorisés pour RAG                    |
+| `document_jobs` | Jobs d'ingestion asynchrones                     |
+| `conversations` | Historique des conversations                     |
+| `usage_records` | Tracking mensuel pour facturation                |
+
+### Fonctions
+
+| Fonction                 | Description                            |
+| ------------------------ | -------------------------------------- |
+| `match_documents()`      | Recherche vectorielle avec filtres     |
+| `validate_api_key()`     | Validation + récupération config agent |
+| `get_user_usage()`       | Usage mensuel avec limites du plan     |
+| `increment_user_usage()` | Incrémente les compteurs               |
+
+## Exécution
+
+### Nouvelle installation
 
 ```sql
--- Supprimer les nouvelles colonnes api_keys
-ALTER TABLE api_keys DROP COLUMN IF EXISTS model_id;
-ALTER TABLE api_keys DROP COLUMN IF EXISTS system_prompt;
-ALTER TABLE api_keys DROP COLUMN IF EXISTS rag_enabled;
-ALTER TABLE api_keys DROP COLUMN IF EXISTS agent_name;
-
--- Supprimer la FK documents
-ALTER TABLE documents DROP COLUMN IF EXISTS api_key_id;
-
--- Note: Les fonctions RPC seront restaurées par la dernière version fonctionnelle
+-- Dans Supabase SQL Editor
+-- Exécuter 001_init_schema.sql
 ```
 
-## Bonnes Pratiques
+### Migration depuis v1
 
-1. **Toujours sauvegarder** avant d'appliquer une migration en production
-2. **Tester en local** avec `supabase start` avant prod
-3. **Vérifier les index** après migration pour les performances
-4. **Documenter** les changements breaking dans CHANGELOG
+> ⚠️ **ATTENTION** : Cette migration ne préserve pas les données existantes.
 
-## Structure Recommandée
+1. Exporter les données critiques (users, api_keys)
+2. Supprimer toutes les tables existantes
+3. Exécuter `001_init_schema.sql`
+4. Réimporter les données avec le nouveau schéma
+
+## Relations
 
 ```
-backend/scripts/migrations/
-├── README.md              # Ce fichier
-├── 001_initial.sql
-├── 002_match_documents.sql
-├── ...
-└── 008_agent_config.sql   # Dernière migration
+auth.users (Supabase Auth)
+    │
+    ├── profiles (1:1)
+    │       │
+    │       ├── subscriptions (1:N)
+    │       │       └── plans (N:1)
+    │       │
+    │       ├── agents (1:N)
+    │       │       │
+    │       │       ├── api_keys (1:N)
+    │       │       ├── documents (1:N)
+    │       │       └── conversations (1:N)
+    │       │
+    │       ├── usage_records (1:N)
+    │       └── document_jobs (1:N)
 ```

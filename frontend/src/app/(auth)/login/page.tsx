@@ -1,14 +1,14 @@
 /**
  * Login Page
  * ===========
- * 
- * Page de connexion avec authentification Google OAuth.
+ *
+ * Page de connexion avec authentification OAuth et Email.
  * Design moderne et premium inspiré des Developer Platforms.
  */
 
 import { Suspense } from "react";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata = {
@@ -18,8 +18,10 @@ export const metadata = {
 
 export default async function LoginPage() {
   // Rediriger si déjà connecté
-  const session = await auth();
-  if (session?.user) {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (user) {
     redirect("/dashboard");
   }
 

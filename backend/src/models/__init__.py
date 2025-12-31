@@ -1,4 +1,8 @@
-"""Models module for RAG Agent IA - Pydantic data models."""
+"""
+Models module for Agent Market Place - Pydantic data models.
+
+Version 2.0.0 - Refactored with agents/api_keys separation and profiles.
+"""
 
 from src.models.document import Document, DocumentCreate, DocumentMetadata, SourceType
 from src.models.conversation import (
@@ -7,6 +11,14 @@ from src.models.conversation import (
     FeedbackFlag,
     FlagType,
 )
+from src.models.agent import (
+    AgentCreate,
+    AgentUpdate,
+    AgentInfo,
+    AgentWithStats,
+    AgentConfig,
+    AgentListResponse,
+)
 from src.models.api_key import (
     ApiKeyScope,
     ApiKeyCreate,
@@ -14,17 +26,26 @@ from src.models.api_key import (
     ApiKeyInfo,
     ApiKeyValidation,
     ApiKeyUsageStats,
-    AgentConfig,
+    ApiKeyListResponse,
+    # Deprecated but kept for backward compat
     AgentConfigUpdate,
 )
 from src.models.user import (
     UserRole,
     OAuthProvider,
+    # New names
+    ProfileCreate,
+    ProfileUpdate,
+    ProfileInfo,
+    ProfileWithSubscription,
+    # Backward compat aliases
     UserCreate,
     UserUpdate,
     UserInfo,
     UserWithSubscription,
     SessionInfo,
+    OAuthCallback,
+    OAuthTokenResponse,
 )
 from src.models.subscription import (
     BillingPeriod,
@@ -47,6 +68,13 @@ __all__ = [
     "ConversationCreate",
     "FeedbackFlag",
     "FlagType",
+    # Agent models (NEW)
+    "AgentCreate",
+    "AgentUpdate",
+    "AgentInfo",
+    "AgentWithStats",
+    "AgentConfig",
+    "AgentListResponse",
     # API Key models
     "ApiKeyScope",
     "ApiKeyCreate",
@@ -54,16 +82,22 @@ __all__ = [
     "ApiKeyInfo",
     "ApiKeyValidation",
     "ApiKeyUsageStats",
-    "AgentConfig",
-    "AgentConfigUpdate",
-    # User models
+    "ApiKeyListResponse",
+    "AgentConfigUpdate",  # Deprecated
+    # Profile/User models
     "UserRole",
     "OAuthProvider",
-    "UserCreate",
-    "UserUpdate",
-    "UserInfo",
-    "UserWithSubscription",
+    "ProfileCreate",
+    "ProfileUpdate",
+    "ProfileInfo",
+    "ProfileWithSubscription",
+    "UserCreate",  # Alias
+    "UserUpdate",  # Alias
+    "UserInfo",  # Alias
+    "UserWithSubscription",  # Alias
     "SessionInfo",
+    "OAuthCallback",
+    "OAuthTokenResponse",
     # Subscription models
     "BillingPeriod",
     "SubscriptionStatus",

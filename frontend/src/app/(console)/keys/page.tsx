@@ -1,29 +1,29 @@
 /**
  * Page de gestion des clés API (Self-Service)
  * ============================================
- * 
+ *
  * Interface utilisateur pour créer et gérer ses clés API.
- * Utilise la session NextAuth pour l'authentification.
+ * Utilise Supabase Auth pour l'authentification.
  */
 
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import { redirect } from "next/navigation";
 import { ApiKeyManager } from "@/components/console/ApiKeyManager";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Key } from "lucide-react";
 
 export default function KeysPage() {
-  const { status } = useSession();
+  const { isAuthenticated, loading } = useAuth();
 
   // Rediriger vers login si non authentifié
-  if (status === "unauthenticated") {
+  if (!loading && !isAuthenticated) {
     redirect("/login");
   }
 
   // Loading state
-  if (status === "loading") {
+  if (loading) {
     return (
       <div className="h-full overflow-y-auto p-8">
         <div className="mx-auto max-w-4xl">
