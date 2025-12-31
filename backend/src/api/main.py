@@ -36,6 +36,7 @@ from src.api.routes_admin import admin_router
 from src.api.routes_auth import router as auth_router
 from src.api.routes_console import router as console_router
 from src.api.routes_agent import router as agent_router
+from src.api.routes_agent_config import router as agent_config_router
 from src.api.routes_keys import router as keys_router
 from src.api.routes_jobs import router as jobs_router
 from src.api.routes_billing import router as billing_router
@@ -327,8 +328,11 @@ def create_app() -> FastAPI:
     # Inclure les routes de la console (self-service)
     app.include_router(console_router, prefix="/api/v1")
     
-    # Inclure les routes de configuration agent
-    app.include_router(agent_router)
+    # Inclure les routes CRUD agents
+    app.include_router(agent_router, prefix="/api/v1")
+    
+    # Inclure les routes de configuration agent (legacy /agent/config)
+    app.include_router(agent_config_router, prefix="/api/v1")
     
     # Inclure les routes de gestion des clés
     app.include_router(keys_router, prefix="/api/v1")

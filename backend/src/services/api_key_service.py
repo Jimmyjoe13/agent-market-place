@@ -91,28 +91,30 @@ class ApiKeyService:
         user_id: str,
         name: str,
         scopes: list[str],
-        rate_limit_per_minute: int = 100,
-        monthly_quota: int = 0,
+        rate_limit_per_minute: int = 60,
         expires_in_days: int | None = None,
-        metadata: dict[str, Any] | None = None,
-        agent_config: AgentConfig | None = None,
+        agent_id: str | None = None,
     ) -> CreateKeyResult:
         """
         Crée une clé API pour un utilisateur avec vérification des quotas.
         
+        Architecture v2:
+        - Une clé API est liée à un agent
+        - Si agent_id n'est pas fourni, crée un agent par défaut
+        
         Règles métier appliquées :
         1. Vérifie que l'utilisateur n'a pas atteint sa limite de clés
         2. Filtre les scopes interdits (admin)
-        3. Génère la clé via le repository
+        3. Crée/utilise un agent
+        4. Génère la clé via le repository
         
         Args:
             user_id: UUID de l'utilisateur propriétaire.
             name: Nom descriptif de la clé.
             scopes: Liste des permissions demandées.
             rate_limit_per_minute: Limite de requêtes par minute.
-            monthly_quota: Quota mensuel (0 = illimité selon plan).
             expires_in_days: Expiration en jours (None = jamais).
-            metadata: Métadonnées additionnelles.
+            agent_id: UUID de l'agent à lier (optionnel).
             
         Returns:
             CreateKeyResult contenant la clé brute et ses informations.
@@ -151,20 +153,39 @@ class ApiKeyService:
                 requested_scopes=scopes,
             )
         
-        # 3. Créer la clé via repository
+        # 3. Gérer l'agent
+        final_agent_id = agent_id
+        if not final_agent_id:
+            # Créer un agent par défaut ou utiliser le premier existant
+            from src.repositories.agent_repository import AgentRepository
+            from src.models.agent import AgentCreate
+            
+            agent_repo = AgentRepository()
+            agents = agent_repo.get_by_user(user_id, active_only=True)
+            
+            if agents:
+                final_agent_id = str(agents[0].id)
+            else:
+                # Créer un agent par défaut
+                new_agent = AgentCreate(
+                    name=f"Agent pour {name}",
+                    description="Agent créé automatiquement",
+                    model_id="mistral-large-latest",
+                    rag_enabled=True,
+                )
+                created_agent = agent_repo.create_agent(user_id, new_agent)
+                final_agent_id = str(created_agent.id)
+                logger.info("Auto-created agent for key", agent_id=final_agent_id, user_id=user_id)
+        
+        # 4. Créer la clé via repository
         create_data = {
             "user_id": user_id,
+            "agent_id": final_agent_id,
             "name": name,
             "scopes": safe_scopes,
             "rate_limit_per_minute": rate_limit_per_minute,
-            "monthly_quota": monthly_quota,
             "expires_in_days": expires_in_days,
-            "metadata": metadata or {},
         }
-        
-        # Ajouter agent_config si fourni
-        if agent_config:
-            create_data["agent_config"] = agent_config.model_dump()
         
         result = self._key_repo.create(create_data)
         
@@ -172,26 +193,26 @@ class ApiKeyService:
             "API key created for user",
             user_id=user_id,
             key_id=result["id"],
+            agent_id=final_agent_id,
             name=name,
             scopes=safe_scopes,
         )
         
-        # 4. Construire la réponse
+        # 5. Construire la réponse
         key_info = ApiKeyInfo(
             id=result["id"],
+            agent_id=result.get("agent_id", final_agent_id),
             name=result["name"],
             prefix=result["prefix"],
             scopes=result["scopes"],
             rate_limit_per_minute=result["rate_limit_per_minute"],
-            monthly_quota=result.get("monthly_quota", 0),
-            monthly_usage=result.get("monthly_usage", 0),
             is_active=result.get("is_active", True),
             expires_at=result.get("expires_at"),
             last_used_at=result.get("last_used_at"),
             created_at=result.get("created_at"),
-            # Agent config fields
-            agent_model_id=result.get("agent_model_id", "mistral-large-latest"),
+            # Agent info (sera peuplé par le repository)
             agent_name=result.get("agent_name"),
+            agent_model_id=result.get("agent_model_id", "mistral-large-latest"),
             rag_enabled=result.get("rag_enabled", True),
         )
         

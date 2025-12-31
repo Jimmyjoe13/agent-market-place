@@ -95,20 +95,18 @@ async def create_my_key(
             name=request.name,
             scopes=scopes,
             rate_limit_per_minute=request.rate_limit_per_minute,
-            monthly_quota=request.monthly_quota,
             expires_in_days=request.expires_in_days,
-            metadata=request.metadata,
-            agent_config=request.agent_config,
+            agent_id=str(request.agent_id) if request.agent_id else None,
         )
         
         return ApiKeyResponse(
             id=result.key_info.id,
+            agent_id=result.key_info.agent_id,
             name=result.key_info.name,
             key=result.raw_key,  # Clé complète, une seule fois!
             prefix=result.key_info.prefix,
             scopes=result.key_info.scopes,
             rate_limit_per_minute=result.key_info.rate_limit_per_minute,
-            monthly_quota=result.key_info.monthly_quota,
             is_active=result.key_info.is_active,
             expires_at=result.key_info.expires_at,
             created_at=result.key_info.created_at,
