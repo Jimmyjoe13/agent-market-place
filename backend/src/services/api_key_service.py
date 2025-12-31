@@ -31,7 +31,6 @@ from src.models.api_key import (
     ApiKeyResponse,
     ApiKeyScope,
     ApiKeyUsageStats,
-    AgentConfig,
 )
 from src.repositories.api_key_repository import ApiKeyRepository
 from src.repositories.subscription_repository import SubscriptionRepository
@@ -332,11 +331,12 @@ class ApiKeyService:
             "rate_limit": validation.rate_limit,
             "is_valid": validation.is_valid,
             "rejection_reason": validation.rejection_reason,
+            # Config agent (champs directs sur ApiKeyValidation)
+            "model_id": validation.model_id,
+            "system_prompt": validation.system_prompt,
+            "rag_enabled": validation.rag_enabled,
+            "agent_name": validation.agent_name,
         }
-        
-        # Ajouter agent_config si disponible
-        if validation.agent_config:
-            result["agent_config"] = validation.agent_config
         
         return result
 

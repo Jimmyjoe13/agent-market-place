@@ -119,7 +119,7 @@ async def query_rag(
         if request.enable_reflection:
             limiter = get_rate_limiter()
             allowed, count, retry_after = await limiter.check_reflection_limit(
-                str(api_key.user_id) if api_key.user_id else str(api_key.id)
+                str(api_key.user_id) if api_key.user_id else str(api_key.key_id)
             )
             if not allowed:
                 raise HTTPException(
@@ -137,17 +137,17 @@ async def query_rag(
         if request.session_id:
             rag._session_id = request.session_id
         
-        # Extraire la config agent (si présente)
-        agent_config = api_key.agent_config
+        # Récupérer la config agent depuis ApiKeyValidation (champs directs)
+        # Les champs sont: model_id, system_prompt, rag_enabled, agent_name
         
         # Déterminer le system_prompt (priorité: request > agent_config > default)
         effective_system_prompt = request.system_prompt
-        if not effective_system_prompt and agent_config and agent_config.system_prompt:
-            effective_system_prompt = agent_config.system_prompt
+        if not effective_system_prompt and api_key.system_prompt:
+            effective_system_prompt = api_key.system_prompt
         
-        # Déterminer si RAG est activé (agent_config peut le désactiver)
+        # Déterminer si RAG est activé (config agent peut le désactiver)
         use_rag = request.use_rag
-        if agent_config and not agent_config.rag_enabled:
+        if api_key.rag_enabled is False:
             use_rag = False
         
         response = await rag.query_async(
@@ -157,8 +157,8 @@ async def query_rag(
             use_rag=use_rag,
             enable_reflection=request.enable_reflection,
             user_id=str(api_key.user_id) if api_key.user_id else None,
-            api_key_id=str(api_key.id) if api_key.id else None,  # Pour isolation documents
-            model_id=agent_config.model_id if agent_config else None,  # Modèle LLM agent
+            api_key_id=str(api_key.key_id) if api_key.key_id else None,  # Pour isolation documents
+            model_id=api_key.model_id,  # Modèle LLM configuré sur l'agent
         )
         
         # Convertir les sources
@@ -186,7 +186,7 @@ async def query_rag(
         
         logger.info(
             "Query processed",
-            key_id=str(api_key.id),
+            key_id=str(api_key.key_id),
             question_length=len(request.question),
             routing_intent=response.routing.intent.value if response.routing else "unknown",
         )
@@ -259,7 +259,7 @@ async def query_rag_stream(
             if request.enable_reflection:
                 limiter = get_rate_limiter()
                 allowed, count, retry_after = await limiter.check_reflection_limit(
-                    str(api_key.user_id) if api_key.user_id else str(api_key.id)
+                    str(api_key.user_id) if api_key.user_id else str(api_key.key_id)
                 )
                 if not allowed:
                     error_data = json.dumps({
@@ -405,7 +405,7 @@ async def ingest_github(
         
         logger.info(
             "GitHub ingestion completed",
-            key_id=str(api_key.id),
+            key_id=str(api_key.key_id),
             repos=len(request.repositories),
             created=stats.total_created,
         )
