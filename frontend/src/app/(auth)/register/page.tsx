@@ -12,6 +12,9 @@ import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { RegisterForm } from "@/components/auth/register-form";
 
+// Force dynamic rendering - Supabase client needs runtime env vars
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Inscription | RAG Agent Platform",
   description: "Créez votre compte développeur gratuit et commencez à utiliser l'API",

@@ -346,7 +346,7 @@ print(response.json()["sources"])`}
                 <CardTitle className="text-xl">Pro</CardTitle>
                 <CardDescription>Pour les développeurs sérieux</CardDescription>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">29€</span>
+                  <span className="text-4xl font-bold">39.99€</span>
                   <span className="text-zinc-500">/mois</span>
                 </div>
               </CardHeader>

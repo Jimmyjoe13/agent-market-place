@@ -48,3 +48,13 @@ export {
 
 // Panel State (Playground)
 export { usePanelState } from "./usePanelState";
+
+// User Usage Dashboard
+export {
+  useUserUsage,
+  calculateUsagePercentages,
+  getUsageColor,
+  getProgressColor,
+  type UserUsage,
+  type UsagePercentages,
+} from "./useUserUsage";

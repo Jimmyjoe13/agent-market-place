@@ -72,6 +72,7 @@ const navItems = [
     href: "/keys",
     icon: Key,
     description: "Gérer les clés API",
+    dataTour: "api-keys-link",
   },
   {
     title: "Docs",

@@ -43,7 +43,7 @@ const TOUR_STEPS: Step[] = [
     disableBeacon: true,
   },
   {
-    target: '[data-tour="api-keys"]',
+    target: '[data-tour="api-keys-link"]',
     title: '🔑 Vos Clés API',
     content: (
       <div className="space-y-2">
@@ -55,7 +55,7 @@ const TOUR_STEPS: Step[] = [
         </p>
       </div>
     ),
-    placement: 'bottom',
+    placement: 'right',
   },
   {
     target: '[data-tour="create-key-btn"]',

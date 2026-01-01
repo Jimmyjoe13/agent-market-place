@@ -21,6 +21,7 @@ export interface Source {
   content_preview: string;
   similarity_score: number | null;
   url: string | null;
+  document_id?: string; // ID du document source (pour vector_store)
 }
 
 export interface RoutingInfo {

@@ -480,6 +480,7 @@ export function ApiKeyManager() {
           <Button
             onClick={() => setShowCreateDialog(true)}
             className="bg-indigo-600 hover:bg-indigo-500"
+            data-tour="create-key-btn"
           >
             <Plus className="h-4 w-4 mr-2" />
             Nouvelle clé

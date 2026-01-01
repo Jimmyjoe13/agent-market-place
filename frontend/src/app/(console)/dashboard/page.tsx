@@ -13,7 +13,7 @@ import { BarChart3, MessageSquare, ThumbsUp, BookOpen, TrendingUp, AlertTriangle
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { DashboardSkeleton, UsageDashboard } from "@/components/dashboard";
 import type { AnalyticsResponse } from "@/types/api";
 
 interface StatCardProps {
@@ -133,46 +133,48 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Score Distribution Chart */}
-        {analytics?.score_distribution && (
-          <Card className="mt-8 border-border bg-card">
-            <CardHeader>
-              <CardTitle className="text-foreground">Distribution des scores</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex h-32 items-end gap-2">
-                {[1, 2, 3, 4, 5].map((score) => {
-                  const count = analytics.score_distribution[score.toString()] || 0;
-                  const maxCount = Math.max(
-                    ...Object.values(analytics.score_distribution)
-                  );
-                  const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
+        {/* Usage & Consumption Dashboard */}
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <UsageDashboard refetchInterval={30000} />
+          
+          {/* Score Distribution Chart */}
+          {analytics?.score_distribution ? (
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="text-foreground">Distribution des scores</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex h-32 items-end gap-2">
+                  {[1, 2, 3, 4, 5].map((score) => {
+                    const count = analytics.score_distribution[score.toString()] || 0;
+                    const maxCount = Math.max(
+                      ...Object.values(analytics.score_distribution)
+                    );
+                    const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
 
-                  return (
-                    <div key={score} className="flex flex-1 flex-col items-center gap-2 group">
-                      <div
-                        className="w-full rounded-t bg-gradient-brand transition-all duration-300 group-hover:opacity-80"
-                        style={{ height: `${height}%`, minHeight: count > 0 ? "8px" : "0" }}
-                      />
-                      <span className="text-sm text-muted-foreground">{score}★</span>
-                      <span className="text-xs text-muted-foreground/70">{count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Empty State for Score Distribution */}
-        {analytics && !analytics.score_distribution && (
-          <Card className="mt-8 border-border bg-card">
-            <CardContent className="py-12 text-center">
-              <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
-              <p className="text-muted-foreground">Aucune donnée de score disponible</p>
-            </CardContent>
-          </Card>
-        )}
+                    return (
+                      <div key={score} className="flex flex-1 flex-col items-center gap-2 group">
+                        <div
+                          className="w-full rounded-t bg-gradient-brand transition-all duration-300 group-hover:opacity-80"
+                          style={{ height: `${height}%`, minHeight: count > 0 ? "8px" : "0" }}
+                        />
+                        <span className="text-sm text-muted-foreground">{score}★</span>
+                        <span className="text-xs text-muted-foreground/70">{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-border bg-card">
+              <CardContent className="py-12 text-center">
+                <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground/30" />
+                <p className="text-muted-foreground">Aucune donnée de score disponible</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );

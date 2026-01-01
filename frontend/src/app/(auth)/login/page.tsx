@@ -11,6 +11,9 @@ import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 
+// Force dynamic rendering - Supabase client needs runtime env vars
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Connexion | RAG Agent Platform",
   description: "Connectez-vous à votre compte développeur",
