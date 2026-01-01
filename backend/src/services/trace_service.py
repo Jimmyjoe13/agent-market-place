@@ -1,17 +1,20 @@
 """
-Trace Service
-==============
+Agent Trace Service
+====================
 
-Service pour le logging des traces d'exécution LLM.
-Permet le monitoring, le debugging et l'analyse des coûts.
+Service pour monitorer et tracer les requêtes d'agent en temps réel.
+Stocke l'historique des requêtes, des routages et des performances.
 """
 
-from dataclasses import dataclass
-from typing import Any
+import time
+from dataclasses import dataclass, asdict
+from datetime import datetime
+from typing import Optional, Any
 from uuid import UUID
 
-from src.config.logging_config import get_logger
-from src.config.supabase import get_supabase_client
+from supabase import Client, create_client
+from src.config.logging_config import LoggerMixin, get_logger
+from src.config.settings import get_settings
 
 logger = get_logger(__name__)
 
@@ -91,7 +94,11 @@ class TraceService:
     """Service pour enregistrer les traces d'exécution LLM."""
     
     def __init__(self):
-        self._client = get_supabase_client()
+        settings = get_settings()
+        self._client = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
     
     def log_trace(self, trace: TraceData) -> str | None:
         """
