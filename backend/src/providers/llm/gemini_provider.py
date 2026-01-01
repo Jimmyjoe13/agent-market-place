@@ -41,12 +41,13 @@ class GeminiLLMProvider(BaseLLMProvider):
         "gemini-1.0-pro",
     ]
     
-    def __init__(self, config: LLMConfig | None = None) -> None:
+    def __init__(self, config: LLMConfig | None = None, api_key: str | None = None) -> None:
         """
         Initialise le provider Gemini.
         
         Args:
             config: Configuration optionnelle.
+            api_key: Clé API optionnelle (BYOK - Bring Your Own Key).
         """
         settings = get_settings()
         
@@ -61,12 +62,13 @@ class GeminiLLMProvider(BaseLLMProvider):
         # Import conditionnel
         try:
             import google.generativeai as genai
-            api_key = getattr(settings, 'gemini_api_key', None)
-            if not api_key:
+            # Priorité: Clé passée explicitement > Clé du settings
+            effective_key = api_key or getattr(settings, 'gemini_api_key', None)
+            if not effective_key:
                 self.logger.warning("Gemini API key not configured")
                 self._client = None
             else:
-                genai.configure(api_key=api_key)
+                genai.configure(api_key=effective_key)
                 self._client = genai.GenerativeModel(self.config.model)
                 self._genai = genai
         except ImportError:

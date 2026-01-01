@@ -42,12 +42,13 @@ class DeepseekLLMProvider(BaseLLMProvider):
         "deepseek-reasoner",
     ]
     
-    def __init__(self, config: LLMConfig | None = None) -> None:
+    def __init__(self, config: LLMConfig | None = None, api_key: str | None = None) -> None:
         """
         Initialise le provider Deepseek.
         
         Args:
             config: Configuration optionnelle.
+            api_key: Clé API optionnelle (BYOK - Bring Your Own Key).
         """
         settings = get_settings()
         
@@ -62,14 +63,15 @@ class DeepseekLLMProvider(BaseLLMProvider):
         # Import conditionnel pour éviter d'obliger l'installation
         try:
             from openai import AsyncOpenAI
-            api_key = getattr(settings, 'deepseek_api_key', None)
-            if not api_key:
+            # Priorité: Clé passée explicitement > Clé du settings
+            effective_key = api_key or getattr(settings, 'deepseek_api_key', None)
+            if not effective_key:
                 self.logger.warning("Deepseek API key not configured")
                 self._client = None
             else:
                 # Utiliser le SDK OpenAI avec base_url Deepseek
                 self._client = AsyncOpenAI(
-                    api_key=api_key,
+                    api_key=effective_key,
                     base_url=self.BASE_URL,
                 )
                 self.logger.info("Deepseek provider initialized", base_url=self.BASE_URL)
