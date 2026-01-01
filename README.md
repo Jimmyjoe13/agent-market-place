@@ -1,5 +1,8 @@
 # 🤖 RAG Agent IA
 
+[![CI Pipeline](https://github.com/Jimmyjoe13/agent-market-place/actions/workflows/ci.yml/badge.svg)](https://github.com/Jimmyjoe13/agent-market-place/actions/workflows/ci.yml)
+[![Security](https://img.shields.io/badge/security-dependabot-green)](https://github.com/Jimmyjoe13/agent-market-place/security)
+
 Système de **Retrieval-Augmented Generation (RAG)** avec interface moderne.
 
 ## 📁 Structure du Projet

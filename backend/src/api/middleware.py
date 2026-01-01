@@ -13,6 +13,37 @@ from src.services.rate_limiter import get_rate_limiter
 from src.config.settings import get_settings
 
 logger = get_logger(__name__)
+settings = get_settings()
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware pour ajouter les headers de sécurité HTTP.
+    
+    Headers ajoutés:
+    - X-Content-Type-Options: Empêche le MIME type sniffing
+    - X-Frame-Options: Empêche le clickjacking
+    - X-XSS-Protection: Protection XSS basique (legacy)
+    - Referrer-Policy: Contrôle les infos de referrer
+    - Strict-Transport-Security: Force HTTPS (production only)
+    """
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        response = await call_next(request)
+        
+        # Headers de sécurité de base
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+        # HSTS uniquement en production (force HTTPS)
+        if not settings.is_development:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        
+        # Permissions Policy (optionnel mais recommandé)
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        
+        return response
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """

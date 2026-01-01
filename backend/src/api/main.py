@@ -41,7 +41,7 @@ from src.api.routes_keys import router as keys_router
 from src.api.routes_jobs import router as jobs_router
 from src.api.routes_billing import router as billing_router
 from src.api.schemas import HealthResponse, ErrorResponse, SourceResponse
-from src.api.middleware import RateLimitMiddleware, RequestLoggingMiddleware
+from src.api.middleware import RateLimitMiddleware, RequestLoggingMiddleware, SecurityHeadersMiddleware
 from src.config.logging_config import setup_logging, get_logger
 from src.config.settings import get_settings
 from src.config.redis import close_redis, get_redis_client
@@ -315,6 +315,7 @@ def create_app() -> FastAPI:
     # Gateway Middlewares
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     
     # Inclure les routes principales
     app.include_router(router, prefix="/api/v1")
