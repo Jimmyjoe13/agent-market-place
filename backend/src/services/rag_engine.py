@@ -38,6 +38,8 @@ from src.services.orchestrator import (
     QueryIntent,
     get_orchestrator,
 )
+from src.services.circuit_breaker import get_circuit_breaker, CircuitBreaker
+from src.services.trace_service import get_trace_service, TraceService
 
 
 @dataclass
@@ -165,6 +167,8 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         self._conversation_repo = ConversationRepository()
         self._user_repo = UserRepository()
         self._perplexity = PerplexityAgent()
+        self._trace_service = get_trace_service()
+        self._breaker = get_circuit_breaker()
         
         # Provider LLM principal
         self._llm_provider: BaseLLMProvider | None = None
@@ -198,6 +202,14 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             )
         return self._llm_provider
     
+    # Modèles de secours par défaut si le modèle principal échoue
+    FALLBACK_MODELS = {
+        "openai": "gpt-4o-mini",
+        "mistral": "mistral-small-latest",
+        "anthropic": "claude-3-haiku-20240307",
+        "gemini": "gemini-1.5-flash",
+    }
+    
     def _detect_provider_from_model(self, model_id: str) -> str:
         """Détecte le provider à partir du model_id."""
         model_lower = model_id.lower()
@@ -213,6 +225,34 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         else:
             # Default to Mistral for mistral-* and unknown models
             return "mistral"
+
+    def _get_fallback_provider(self, current_provider_type: str, user_id: str | None = None) -> BaseLLMProvider:
+        """Récupère un provider de secours en cas de panne du provider principal."""
+        # On essaie d'utiliser Mistral comme fallback universel car c'est notre moteur par défaut
+        # sauf si on est déjà sur Mistral, alors on utilise OpenAI mini
+        fallback_type = "openai" if current_provider_type == "mistral" else "mistral"
+        fallback_model = self.FALLBACK_MODELS.get(fallback_type, "gpt-4o-mini")
+        
+        self.logger.info("Getting fallback provider", current=current_provider_type, fallback=fallback_type)
+        
+        user_keys = {}
+        if user_id:
+            user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
+        
+        api_key = user_keys.get(fallback_type)
+        
+        llm_config = LLMConfig(
+            model=fallback_model,
+            temperature=self.config.llm_temperature,
+            max_tokens=self.config.llm_max_tokens,
+        )
+        
+        return self._llm_factory.get_provider(
+            fallback_type,
+            llm_config,
+            cache=False,
+            api_key=api_key
+        )
     
     async def query_async(
         self,
@@ -341,14 +381,36 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
         )
         
-        # Mode réflexion ou standard
-        if routing.use_reflection:
-            llm_response = await provider.generate_with_reflection(messages)
-        else:
-            llm_response = await provider.generate(
-                messages,
+        # 5. Exécution avec Circuit Breaker et Fallback
+        async def call_llm(p: BaseLLMProvider):
+            if routing.use_reflection:
+                return await p.generate_with_reflection(messages)
+            else:
+                return await p.generate(
+                    messages,
+                    system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
+                )
+
+        async def fallback_call():
+            self.logger.warning("Primary provider failing, attempting fallback", provider=provider_type)
+            fallback_p = self._get_fallback_provider(provider_type, user_id=user_id)
+            # Re-construire les messages pour le nouveau provider (au cas où le format change)
+            fallback_messages = fallback_p.build_messages(
+                question,
+                context=full_context if full_context else None,
                 system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
             )
+            return await fallback_p.generate(fallback_messages)
+
+        try:
+            llm_response = await self._breaker.execute(
+                provider_type,
+                lambda: call_llm(provider),
+                fallback=fallback_call
+            )
+        except Exception as e:
+            self.logger.error("LLM Generation failed even with fallback", error=str(e))
+            raise
         
         answer = llm_response.content
         thought_process = llm_response.thought_process
@@ -409,6 +471,8 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         use_rag: bool | None = None,
         enable_reflection: bool | None = None,
         user_id: str | None = None,
+        api_key_id: str | None = None,
+        model_id: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Traite une requête en mode streaming.
@@ -489,11 +553,14 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                     "data": {"type": "web", "found": bool(result)},
                 }
         
-        # Exécuter les recherches
+        # 2. Recherches
+        vector_context = ""
+        web_context = ""
+        
         if routing.should_use_rag:
             yield {"event": "search_start", "data": {"type": "rag"}}
             vector_context, vector_sources = await self._search_vector_store(
-                question, user_id
+                question, user_id, api_key_id
             )
             sources.extend(vector_sources)
             yield {
@@ -521,28 +588,41 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         
         full_context = self._build_context(vector_context, web_context)
         
-        # BYOK logic for streaming
-        user_keys = {}
-        if user_id:
-            user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
-        
-        provider_type = self.config.llm_provider
-        provider_api_key = user_keys.get(provider_type)
-        
-        llm_config = LLMConfig(
-            model=self.config.llm_model,
-            temperature=self.config.llm_temperature,
-            max_tokens=self.config.llm_max_tokens,
-            enable_reflection=routing.use_reflection,
-            stream=True,
-        )
-        
-        provider = self._llm_factory.get_provider(
-            provider_type,
-            llm_config,
-            cache=False,
-            api_key=provider_api_key
-        )
+        # Déterminer le provider (BYOK ou global)
+        if model_id:
+            provider_type = self._detect_provider_from_model(model_id)
+            current_model = model_id
+        else:
+            provider_type = self.config.llm_provider
+            current_model = self.config.llm_model
+
+        # Vérifier le circuit breaker avant de commencer
+        if self._breaker.is_open(provider_type):
+            self.logger.warning("Circuit is OPEN for primary provider, forcing fallback", provider=provider_type)
+            provider = self._get_fallback_provider(provider_type, user_id=user_id)
+            provider_type = provider.provider_name.value
+        else:
+            user_keys = {}
+            if user_id:
+                user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
+            
+            provider_api_key = user_keys.get(provider_type)
+            
+            llm_config = LLMConfig(
+                model=current_model,
+                temperature=self.config.llm_temperature,
+                max_tokens=self.config.llm_max_tokens,
+                enable_reflection=routing.use_reflection,
+                stream=True,
+            )
+            
+            provider = self._llm_factory.get_provider(
+                provider_type,
+                llm_config,
+                cache=False,
+                api_key=provider_api_key
+            )
+
         messages = provider.build_messages(
             question,
             context=full_context if full_context else None,
@@ -551,20 +631,54 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         
         full_response = ""
         thought_content = ""
+        has_started_content = False
         
-        async for chunk in provider.generate_stream(messages):
-            if chunk.is_thought:
-                thought_content += chunk.content
-                yield {
-                    "event": "thought",
-                    "data": {"content": chunk.content},
-                }
+        try:
+            async for chunk in provider.generate_stream(messages):
+                if chunk.is_thought:
+                    thought_content += chunk.content
+                    yield {
+                        "event": "thought",
+                        "data": {"content": chunk.content},
+                    }
+                else:
+                    full_response += chunk.content
+                    has_started_content = True
+                    yield {
+                        "event": "chunk",
+                        "data": {"content": chunk.content},
+                    }
+            
+            # Succès !
+            await self._breaker._record_success(provider_type)
+            
+        except Exception as e:
+            await self._breaker._record_failure(provider_type, e)
+            self.logger.error("Streaming error", provider=provider_type, error=str(e))
+            
+            # Si on n'a pas encore envoyé de contenu, on peut tenter un fallback
+            if not has_started_content:
+                self.logger.warning("Error before content started, attempting streaming fallback")
+                try:
+                    fallback_p = self._get_fallback_provider(provider_type, user_id=user_id)
+                    fallback_messages = fallback_p.build_messages(
+                        question,
+                        context=full_context if full_context else None,
+                        system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
+                    )
+                    async for chunk in fallback_p.generate_stream(fallback_messages):
+                        if chunk.is_thought:
+                            thought_content += chunk.content
+                            yield {"event": "thought", "data": {"content": chunk.content}}
+                        else:
+                            full_response += chunk.content
+                            yield {"event": "chunk", "data": {"content": chunk.content}}
+                except Exception as fallback_err:
+                    self.logger.error("Streaming fallback failed", error=str(fallback_err))
+                    yield {"event": "error", "data": {"message": "Désolé, le service est temporairement indisponible."}}
             else:
-                full_response += chunk.content
-                yield {
-                    "event": "chunk",
-                    "data": {"content": chunk.content},
-                }
+                # Trop tard pour le fallback, on informe l'utilisateur
+                yield {"event": "error", "data": {"message": "La connexion a été interrompue. Veuillez réessayer."}}
         
         # 4. Finalisation
         elapsed_ms = int((time.time() - start_time) * 1000)
@@ -760,8 +874,37 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             )
             
             created = self._conversation_repo.log_conversation(conv)
+            
+            # Aussi logger la trace de monitoring
+            if user_id:
+                self._trace_service.log_success(
+                    user_id=user_id,
+                    model_used=self.config.llm_model,
+                    prompt_tokens=tokens.get("input", 0),
+                    completion_tokens=tokens.get("output", 0),
+                    latency_ms=elapsed_ms,
+                    query_preview=question[:200] if question else None,
+                    routing_decision=routing_info,
+                    sources_count=len(sources),
+                )
+            
             return str(created.id)
             
         except Exception as e:
             self.logger.error("Failed to log conversation", error=str(e))
+            
+            # Logger l'erreur dans les traces si possible
+            if user_id:
+                try:
+                    self._trace_service.log_error(
+                        user_id=user_id,
+                        model_used=self.config.llm_model,
+                        error_message=str(e),
+                        error_code="log_conversation_failed",
+                        latency_ms=elapsed_ms,
+                        query_preview=question[:200] if question else None,
+                    )
+                except Exception:
+                    pass  # Ne pas cascader les erreurs
+            
             return None

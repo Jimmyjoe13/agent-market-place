@@ -28,6 +28,12 @@ from src.services.document_processor import (
     RecursiveTextSplitter,
     get_document_processor,
 )
+from src.services.trace_service import (
+    TraceService,
+    TraceData,
+    get_trace_service,
+    estimate_cost_cents,
+)
 
 __all__ = [
     # Core services
@@ -60,5 +66,9 @@ __all__ = [
     "ChunkingConfig",
     "RecursiveTextSplitter",
     "get_document_processor",
+    # Trace Service
+    "TraceService",
+    "TraceData",
+    "get_trace_service",
+    "estimate_cost_cents",
 ]
-

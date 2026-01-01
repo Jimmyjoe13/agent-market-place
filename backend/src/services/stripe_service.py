@@ -85,28 +85,109 @@ class StripeService:
     async def handle_webhook(self, payload: bytes, sig_header: str) -> bool:
         """
         Traite les événements envoyés par Stripe.
+        
+        Sécurité anti-rejeu:
+        - Vérifie que l'event n'a pas déjà été traité
+        - Vérifie que l'event n'est pas trop vieux (> 5 minutes)
+        - Enregistre l'event_id après traitement réussi
         """
+        import time
+        
         try:
             event = stripe.Webhook.construct_event(
                 payload, sig_header, self.webhook_secret
             )
         except ValueError:
+            logger.warning("Webhook: Invalid payload")
             return False
         except stripe.error.SignatureVerificationError:
+            logger.warning("Webhook: Invalid signature")
+            return False
+
+        event_id = event.get("id")
+        event_type = event.get("type")
+        event_created = event.get("created", 0)
+        
+        # Vérification 1: Event trop vieux (> 5 minutes = 300 secondes)
+        current_time = int(time.time())
+        if current_time - event_created > 300:
+            logger.warning(
+                "Webhook rejected: Event too old",
+                event_id=event_id,
+                event_age_seconds=current_time - event_created
+            )
+            return False
+        
+        # Vérification 2: Event déjà traité (anti-rejeu)
+        if self._is_event_already_processed(event_id):
+            logger.warning(
+                "Webhook rejected: Replay attack detected",
+                event_id=event_id,
+                event_type=event_type
+            )
             return False
 
         # Traitement des événements
-        if event["type"] == "checkout.session.completed":
-            session = event["data"]["object"]
-            await self._handle_checkout_completed(session)
-        elif event["type"] == "customer.subscription.updated":
-            subscription = event["data"]["object"]
-            await self._handle_subscription_updated(subscription)
-        elif event["type"] == "customer.subscription.deleted":
-            subscription = event["data"]["object"]
-            await self._handle_subscription_deleted(subscription)
-
-        return True
+        try:
+            if event_type == "checkout.session.completed":
+                session = event["data"]["object"]
+                await self._handle_checkout_completed(session)
+            elif event_type == "customer.subscription.updated":
+                subscription = event["data"]["object"]
+                await self._handle_subscription_updated(subscription)
+            elif event_type == "customer.subscription.deleted":
+                subscription = event["data"]["object"]
+                await self._handle_subscription_deleted(subscription)
+            
+            # Enregistrer l'event comme traité
+            self._mark_event_as_processed(event_id, event_type)
+            
+            logger.info(
+                "Webhook processed successfully",
+                event_id=event_id,
+                event_type=event_type
+            )
+            return True
+            
+        except Exception as e:
+            logger.error(
+                "Webhook processing error",
+                event_id=event_id,
+                event_type=event_type,
+                error=str(e)
+            )
+            # Ne pas marquer comme traité en cas d'erreur pour permettre un retry
+            return False
+    
+    def _is_event_already_processed(self, event_id: str) -> bool:
+        """Vérifie si un event a déjà été traité."""
+        try:
+            result = self.user_repo.client.table("processed_webhook_events") \
+                .select("event_id") \
+                .eq("event_id", event_id) \
+                .execute()
+            return len(result.data) > 0
+        except Exception as e:
+            logger.error("Error checking webhook event", error=str(e))
+            # En cas d'erreur DB, on refuse par précaution
+            return True
+    
+    def _mark_event_as_processed(self, event_id: str, event_type: str) -> None:
+        """Enregistre un event comme traité."""
+        try:
+            self.user_repo.client.table("processed_webhook_events") \
+                .insert({
+                    "event_id": event_id,
+                    "event_type": event_type
+                }) \
+                .execute()
+        except Exception as e:
+            # Log mais ne pas échouer - l'event est déjà traité
+            logger.warning(
+                "Failed to mark webhook event as processed",
+                event_id=event_id,
+                error=str(e)
+            )
 
     async def _handle_checkout_completed(self, session: Any):
         user_id = session.get("client_reference_id")

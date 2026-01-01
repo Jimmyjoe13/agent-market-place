@@ -141,7 +141,7 @@ INSERT INTO public.plans (slug, name, description, price_monthly_cents, price_ye
 VALUES 
     ('free', 'Free', 'Parfait pour découvrir', 0, 0, 100, 1, 10, 1, 
      '["100 requêtes/mois", "1 agent", "10 documents", "Support communauté"]', 1),
-    ('pro', 'Pro', 'Pour les développeurs', 2900, 29000, 5000, 5, 100, 5, 
+    ('pro', 'Pro', 'Pour les développeurs', 3999, 42988, 5000, 5, 100, 5, 
      '["5000 requêtes/mois", "5 agents", "100 documents", "Support email", "BYOK"]', 2),
     ('enterprise', 'Enterprise', 'Solution sur mesure', 0, 0, -1, -1, -1, -1, 
      '["Requêtes illimitées", "Agents illimités", "SSO/SAML", "SLA 99.9%"]', 3)
