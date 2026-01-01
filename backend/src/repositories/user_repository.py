@@ -450,6 +450,55 @@ class UserRepository(BaseRepository[UserInfo]):
         except Exception as e:
             self.logger.error("Error getting BYOK key", error=str(e))
             return None
+    
+    def get_decrypted_provider_keys(self, user_id: str) -> dict[str, str]:
+        """
+        Récupère toutes les clés BYOK déchiffrées pour un utilisateur.
+        
+        Cette méthode récupère toutes les clés provider (OpenAI, Mistral, DeepSeek, etc.)
+        stockées de manière chiffrée et les retourne déchiffrées.
+        
+        Args:
+            user_id: UUID de l'utilisateur.
+            
+        Returns:
+            Dictionnaire {provider: api_key} avec les clés déchiffrées.
+            Retourne un dict vide si aucune clé ou erreur.
+        """
+        try:
+            response = (
+                self.table
+                .select("provider_keys_encrypted")
+                .eq("id", user_id)
+                .single()
+                .execute()
+            )
+            
+            if not response.data:
+                return {}
+            
+            encrypted_keys = response.data.get("provider_keys_encrypted", {}) or {}
+            
+            # Déchiffrer toutes les clés disponibles
+            decrypted_keys = {}
+            for provider, encrypted_key in encrypted_keys.items():
+                if encrypted_key:
+                    try:
+                        decrypted_keys[provider] = decrypt_value(encrypted_key)
+                    except Exception as decrypt_err:
+                        self.logger.warning(
+                            "Failed to decrypt key for provider",
+                            provider=provider,
+                            error=str(decrypt_err)
+                        )
+                        # Continue avec les autres clés même si une échoue
+                        continue
+            
+            return decrypted_keys
+            
+        except Exception as e:
+            self.logger.error("Error getting decrypted provider keys", error=str(e))
+            return {}
 
 
 # Alias pour clarté
