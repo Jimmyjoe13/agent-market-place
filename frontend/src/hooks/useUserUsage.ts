@@ -12,8 +12,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "./useAuth";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { api } from "@/lib/api";
 
 // Types
 export interface UserUsage {
@@ -94,17 +93,9 @@ export function useUserUsage(options?: { refetchInterval?: number }) {
         throw new Error("Non authentifié");
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/console/usage`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Impossible de récupérer l'usage");
-      }
-
-      return response.json();
+      // Utiliser le client API centralisé qui gère correctement les URLs
+      api.setAccessToken(accessToken);
+      return await api.getUserUsage();
     },
     enabled: !!accessToken,
     refetchInterval: options?.refetchInterval ?? 30000, // 30 secondes par défaut
@@ -113,3 +104,4 @@ export function useUserUsage(options?: { refetchInterval?: number }) {
 }
 
 export default useUserUsage;
+
