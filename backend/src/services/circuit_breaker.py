@@ -137,7 +137,8 @@ class CircuitBreaker:
             )
             
             if fallback:
-                return await fallback() if asyncio.iscoroutinefunction(fallback) else fallback()
+                fallback_result = fallback()
+                return await fallback_result if asyncio.iscoroutine(fallback_result) else fallback_result
             
             raise CircuitOpenError(provider, retry_after)
         
@@ -146,14 +147,17 @@ class CircuitBreaker:
             async with self._lock:
                 if self._half_open_calls[provider] >= self.config.half_open_max_calls:
                     if fallback:
-                        return await fallback() if asyncio.iscoroutinefunction(fallback) else fallback()
+                        fallback_result = fallback()
+                        return await fallback_result if asyncio.iscoroutine(fallback_result) else fallback_result
                     raise CircuitOpenError(provider, self.config.recovery_timeout)
                 
                 self._half_open_calls[provider] += 1
         
         # Exécuter l'opération
         try:
-            result = await operation() if asyncio.iscoroutinefunction(operation) else operation()
+            result = operation()
+            if asyncio.iscoroutine(result):
+                result = await result
             await self._record_success(provider)
             return result
             
