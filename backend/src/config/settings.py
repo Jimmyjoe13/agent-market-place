@@ -127,6 +127,16 @@ class Settings(BaseSettings):
         description="URL Redis pour le rate limiting (ex: redis://localhost:6379)",
     )
 
+    # ===== Monitoring & Observability =====
+    sentry_dsn: str = Field(
+        default="",
+        description="Sentry DSN pour le tracking d'erreurs (optionnel)",
+    )
+    environment: str = Field(
+        default="development",
+        description="Environnement pour Sentry et métriques (development, staging, production)",
+    )
+
     # ===== Application Settings =====
     app_env: Literal["development", "staging", "production"] = Field(
         default="development",

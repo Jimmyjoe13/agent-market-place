@@ -79,6 +79,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """
     Middleware pour logger les requêtes et leur temps d'exécution.
+    Enregistre également les métriques Prometheus.
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -101,6 +102,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             status=status_code,
             duration=f"{process_time:.3f}s",
         )
+
+        # Enregistrer les métriques Prometheus (skip /metrics pour éviter récursion)
+        if path != "/metrics":
+            try:
+                from src.utils.metrics import record_api_request
+
+                record_api_request(method, path, status_code, process_time)
+            except ImportError:
+                pass  # Metrics module not available
 
         # Ajouter le header de temps d'exécution
         response.headers["X-Response-Time"] = f"{process_time:.3f}s"

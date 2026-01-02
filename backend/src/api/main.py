@@ -57,7 +57,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     setup_logging()
     logger = get_logger("api")
+    settings = get_settings()
     logger.info("API starting", version=__version__)
+
+    # Initialiser Sentry si configuré
+    if settings.sentry_dsn:
+        try:
+            import sentry_sdk
+            from sentry_sdk.integrations.fastapi import FastApiIntegration
+            from sentry_sdk.integrations.starlette import StarletteIntegration
+
+            sentry_sdk.init(
+                dsn=settings.sentry_dsn,
+                integrations=[
+                    StarletteIntegration(),
+                    FastApiIntegration(),
+                ],
+                traces_sample_rate=0.1,  # 10% des traces en production
+                environment=settings.environment,
+                release=__version__,
+            )
+            logger.info("Sentry initialized", environment=settings.environment)
+        except ImportError:
+            logger.warning("Sentry SDK not installed, skipping initialization")
+
+    # Initialiser les métriques Prometheus
+    try:
+        from src.utils.metrics import set_app_info
+
+        set_app_info(version=__version__, environment=settings.environment)
+        logger.info("Prometheus metrics initialized")
+    except ImportError:
+        logger.warning("Prometheus client not installed, skipping metrics")
 
     # Préchauffer Redis (optionnel)
     await get_redis_client()
@@ -400,8 +431,31 @@ def create_app() -> FastAPI:
             "docs": "/docs",
             "redoc": "/redoc",
             "health": "/health",
+            "metrics": "/metrics",
             "auth_required": settings.api_key_required,
         }
+
+    @app.get(
+        "/metrics",
+        include_in_schema=False,
+        summary="Prometheus Metrics",
+    )
+    async def metrics():
+        """
+        Endpoint pour les métriques Prometheus.
+
+        Non documenté dans Swagger car destiné au scraping Prometheus.
+        """
+        try:
+            from fastapi.responses import Response
+            from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+            return Response(
+                content=generate_latest(),
+                media_type=CONTENT_TYPE_LATEST,
+            )
+        except ImportError:
+            return {"error": "prometheus_client not installed"}
 
     return app
 

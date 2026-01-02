@@ -114,6 +114,22 @@ class MistralLLMProvider(BaseLLMProvider):
             )
 
             latency_ms = int((time.time() - start_time) * 1000)
+            duration = time.time() - start_time
+
+            # Enregistrer les métriques Prometheus
+            try:
+                from src.utils.metrics import record_llm_request
+
+                record_llm_request(
+                    provider="mistral",
+                    model=self.config.model,
+                    status="success",
+                    duration=duration,
+                    prompt_tokens=response.usage.prompt_tokens,
+                    completion_tokens=response.usage.completion_tokens,
+                )
+            except ImportError:
+                pass  # Metrics not available
 
             return LLMResponse(
                 content=response.choices[0].message.content,
@@ -125,6 +141,19 @@ class MistralLLMProvider(BaseLLMProvider):
             )
 
         except Exception as e:
+            # Enregistrer l'erreur dans les métriques
+            try:
+                from src.utils.metrics import record_llm_request
+
+                record_llm_request(
+                    provider="mistral",
+                    model=self.config.model,
+                    status="error",
+                    duration=time.time() - start_time,
+                )
+            except ImportError:
+                pass
+
             self.logger.error("Mistral generation failed", error=str(e))
             raise
 
