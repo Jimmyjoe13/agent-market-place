@@ -2,91 +2,187 @@
 
 [![CI Pipeline](https://github.com/Jimmyjoe13/agent-market-place/actions/workflows/ci.yml/badge.svg)](https://github.com/Jimmyjoe13/agent-market-place/actions/workflows/ci.yml)
 [![Security](https://img.shields.io/badge/security-dependabot-green)](https://github.com/Jimmyjoe13/agent-market-place/security)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Système de **Retrieval-Augmented Generation (RAG)** avec interface moderne.
+Plateforme SaaS de **Retrieval-Augmented Generation (RAG)** avec une API multi-providers et une interface moderne.
+
+## ✨ Features
+
+- 🔍 **RAG Intelligent** - Recherche sémantique + génération contextuelle
+- 🤖 **Multi-Provider LLM** - Mistral, OpenAI, Gemini (BYOK)
+- 📊 **Dashboard Analytics** - Suivi d'utilisation en temps réel
+- 🔐 **API Sécurisée** - Clés API, rate limiting, scopes
+- 💳 **Monétisation** - Intégration Stripe (Free/Pro)
+- 📄 **Ingestion Documents** - PDF, GitHub repos, texte
+- ⚡ **Streaming** - Réponses en temps réel (SSE)
+- 🛡️ **Résilience** - Circuit breaker, fallback providers
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Frontend      │────▶│   Backend       │────▶│   Supabase      │
+│   Next.js 16    │     │   FastAPI       │     │   pgvector      │
+│   React 19      │     │   Python 3.10+  │     │   PostgreSQL    │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                    ┌────────────┼────────────┐
+                    ▼            ▼            ▼
+              ┌─────────┐  ┌─────────┐  ┌─────────┐
+              │ Mistral │  │ OpenAI  │  │ Gemini  │
+              └─────────┘  └─────────┘  └─────────┘
+```
 
 ## 📁 Structure du Projet
 
 ```
-agent-ia_augmenté/
-├── backend/          # API FastAPI (Python)
-│   ├── src/          # Code source
-│   ├── scripts/      # Migrations SQL
-│   ├── tests/        # Tests unitaires
-│   └── requirements.txt
-│
-├── frontend/         # UI Next.js (React)
+agent-market-place/
+├── backend/              # API FastAPI (Python)
 │   ├── src/
-│   │   ├── app/      # Pages (App Router)
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── lib/      # API client
-│   │   └── types/
-│   └── package.json
+│   │   ├── api/          # Routes & middlewares
+│   │   ├── providers/    # LLM providers (Strategy Pattern)
+│   │   ├── services/     # Business logic
+│   │   ├── workers/      # Jobs asynchrones (RQ)
+│   │   └── utils/        # Métriques, encryption
+│   └── tests/            # Tests unitaires
 │
-├── render.yaml       # Config backend (Render)
-└── netlify.toml      # Config frontend (Netlify)
+├── frontend/             # UI Next.js (React)
+│   ├── src/
+│   │   ├── app/          # Pages (App Router)
+│   │   ├── components/   # Composants UI
+│   │   ├── hooks/        # React hooks
+│   │   └── __tests__/    # Tests Vitest
+│   └── e2e/              # Tests Playwright
+│
+├── docs/                 # Documentation
+│   ├── API.md            # Référence API
+│   └── ADR.md            # Architecture decisions
+│
+└── .github/workflows/    # CI/CD
 ```
 
 ## 🚀 Démarrage Rapide
 
-### Backend (FastAPI)
+### Prérequis
+
+- Python 3.10+
+- Node.js 20+
+- Compte [Supabase](https://supabase.com)
+- Clé API [Mistral](https://console.mistral.ai)
+
+### Backend
 
 ```bash
 cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env  # Configurer les variables
+cp .env.example .env      # Configurer les variables
 python -m uvicorn src.api.main:app --reload
 ```
 
-### Frontend (Next.js)
+API disponible sur http://localhost:8000
+
+### Frontend
 
 ```bash
 cd frontend
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-Ouvrir http://localhost:3000
+App disponible sur http://localhost:3000
+
+## 🧪 Tests
+
+### Backend
+
+```bash
+cd backend
+pytest                           # Tous les tests
+pytest --cov=src                # Avec couverture
+ruff check src/                 # Linting
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm run test:unit:run           # Tests Vitest (29 tests)
+npm run test                    # Tests E2E Playwright
+npm run lint                    # ESLint
+```
 
 ## 🌐 Déploiement
 
+### Production URLs
+
+- **Frontend**: https://rag-agentia.netlify.app
+- **Backend**: https://agent-ia-augment.onrender.com
+
 ### Backend sur Render
 
-1. Connecter le repo GitHub à Render
-2. Le fichier `render.yaml` configure automatiquement le service
-3. Ajouter les variables d'environnement dans le dashboard Render
+1. Connecter le repo GitHub
+2. Configurer avec `render.yaml`
+3. Ajouter les variables d'environnement
 
 ### Frontend sur Netlify
 
-1. Connecter le repo GitHub à Netlify
-2. Le fichier `netlify.toml` configure automatiquement le build
-3. Définir `NEXT_PUBLIC_API_URL` vers l'URL Render
+1. Connecter le repo GitHub
+2. Configurer avec `netlify.toml`
+3. Définir `NEXT_PUBLIC_API_URL`
 
-## 🔐 Configuration
+## 📖 Documentation
 
-### Variables Backend (.env)
+| Document                              | Description               |
+| ------------------------------------- | ------------------------- |
+| [API Reference](docs/API.md)          | Endpoints, auth, exemples |
+| [Architecture Decisions](docs/ADR.md) | Choix techniques (ADR)    |
+| [Contributing](CONTRIBUTING.md)       | Guide de contribution     |
+| [Changelog](CHANGELOG.md)             | Historique des versions   |
+
+## 🔧 Configuration
+
+### Variables Backend Essentielles
 
 ```env
+# Required
 MISTRAL_API_KEY=xxx
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_ANON_KEY=xxx
 SUPABASE_SERVICE_ROLE_KEY=xxx
-API_MASTER_KEY=master_xxx
-CORS_ORIGINS=https://votre-app.netlify.app
+
+# Optional
+OPENAI_API_KEY=xxx
+SENTRY_DSN=https://xxx@sentry.io/xxx
+REDIS_URL=redis://xxx
 ```
 
 ### Variables Frontend
 
 ```env
-NEXT_PUBLIC_API_URL=https://rag-agent-api.onrender.com/api/v1
+NEXT_PUBLIC_API_URL=https://agent-ia-augment.onrender.com/api/v1
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 ```
 
-## 📖 Documentation API
+## 📊 Monitoring
 
-- Swagger UI: `https://votre-api.onrender.com/docs`
-- OpenAPI JSON: `https://votre-api.onrender.com/openapi.json`
+- **Métriques Prometheus**: `/metrics`
+- **Health Check**: `/health`
+- **Error Tracking**: Sentry (optionnel)
+
+## 🤝 Contributing
+
+Les contributions sont les bienvenues ! Voir [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📜 License
 
-MIT License
+MIT License - Voir [LICENSE](LICENSE)
+
+---
+
+<div align="center">
+  Made with ❤️ by the RAG Agent Team
+</div>
