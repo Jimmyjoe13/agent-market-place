@@ -10,12 +10,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 # ===== Query Schemas =====
+
 
 class QueryRequest(BaseModel):
     """Requête pour le RAG."""
-    
+
     question: str = Field(
         ...,
         description="Question à poser au système RAG",
@@ -71,7 +71,7 @@ class QueryRequest(BaseModel):
 
 class SourceResponse(BaseModel):
     """Source utilisée dans la réponse."""
-    
+
     source_type: str
     content_preview: str
     similarity_score: float | None = None
@@ -80,7 +80,7 @@ class SourceResponse(BaseModel):
 
 class QueryResponse(BaseModel):
     """Réponse du RAG."""
-    
+
     answer: str
     sources: list[SourceResponse]
     conversation_id: str | None
@@ -99,9 +99,10 @@ class QueryResponse(BaseModel):
 
 # ===== Feedback Schemas =====
 
+
 class FeedbackRequest(BaseModel):
     """Requête de feedback."""
-    
+
     conversation_id: UUID = Field(
         ...,
         description="ID de la conversation",
@@ -124,16 +125,17 @@ class FeedbackRequest(BaseModel):
 
 class FeedbackResponse(BaseModel):
     """Réponse de feedback."""
-    
+
     success: bool
     message: str
 
 
 # ===== Ingestion Schemas =====
 
+
 class IngestGithubRequest(BaseModel):
     """Requête d'ingestion GitHub."""
-    
+
     repositories: list[str] = Field(
         ...,
         description="Liste des repos (format: owner/repo)",
@@ -147,7 +149,7 @@ class IngestGithubRequest(BaseModel):
 
 class IngestTextRequest(BaseModel):
     """Requête d'ingestion de texte."""
-    
+
     content: str = Field(
         ...,
         description="Contenu textuel à ingérer",
@@ -169,7 +171,7 @@ class IngestTextRequest(BaseModel):
 
 class IngestResponse(BaseModel):
     """Réponse d'ingestion."""
-    
+
     success: bool
     documents_created: int
     documents_skipped: int
@@ -179,9 +181,10 @@ class IngestResponse(BaseModel):
 
 # ===== Analytics Schemas =====
 
+
 class AnalyticsResponse(BaseModel):
     """Statistiques du système."""
-    
+
     total_conversations: int
     avg_feedback_score: float | None
     flagged_count: int
@@ -191,9 +194,10 @@ class AnalyticsResponse(BaseModel):
 
 # ===== Health Schemas =====
 
+
 class HealthResponse(BaseModel):
     """État de santé de l'API."""
-    
+
     status: str
     version: str
     services: dict[str, bool]
@@ -201,9 +205,10 @@ class HealthResponse(BaseModel):
 
 # ===== Error Schemas =====
 
+
 class ErrorResponse(BaseModel):
     """Réponse d'erreur standardisée."""
-    
+
     error: str = Field(..., description="Code d'erreur (ex: INVALID_REQUEST)")
     message: str = Field(..., description="Message d'erreur descriptif")
     details: dict[str, Any] | None = Field(default=None, description="Détails supplémentaires")

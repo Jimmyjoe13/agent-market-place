@@ -8,9 +8,9 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 
-// Variables d'environnement Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Variables d'environnement Supabase (avec fallback pour CI build)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 /**
  * Client Supabase pour le browser (côté client).
@@ -18,6 +18,11 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
  * Utilise les cookies pour persister la session.
  */
 export function createClient() {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      "Missing Supabase environment variables. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    );
+  }
   return createBrowserClient(supabaseUrl, supabaseAnonKey);
 }
 

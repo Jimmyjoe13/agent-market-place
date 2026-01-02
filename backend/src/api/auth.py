@@ -12,12 +12,12 @@ Ce module fournit :
 Usage:
     >>> from fastapi import Depends
     >>> from src.api.auth import require_api_key, require_scope
-    >>> 
+    >>>
     >>> @router.post("/query")
     >>> async def query(api_key = Depends(require_api_key)):
     ...     # api_key contient les informations de la clé validée
     ...     pass
-    >>> 
+    >>>
     >>> @router.post("/admin/keys")
     >>> async def create_key(api_key = Depends(require_scope("admin"))):
     ...     # Nécessite le scope "admin"
@@ -25,7 +25,7 @@ Usage:
 """
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader, APIKeyQuery
@@ -69,6 +69,7 @@ def get_api_key_repo() -> ApiKeyRepository:
 
 # ===== Dépendances d'authentification =====
 
+
 async def get_api_key(
     request: Request,
     header_key: str | None = Security(api_key_header),
@@ -76,32 +77,32 @@ async def get_api_key(
 ) -> ApiKeyValidation | None:
     """
     Extrait et valide la clé API depuis la requête.
-    
+
     Cherche la clé dans l'ordre :
     1. Header `X-API-Key`
     2. Query parameter `api_key`
-    
+
     Args:
         request: Requête FastAPI.
         header_key: Clé depuis le header.
         query_key: Clé depuis le query param.
-        
+
     Returns:
         ApiKeyValidation si valide, None si pas de clé fournie.
-        
+
     Raises:
         HTTPException 401: Si la clé est invalide.
         HTTPException 403: Si la clé est expirée/révoquée/quota dépassé.
     """
     settings = get_settings()
-    
+
     # Mode développement sans auth
     if not settings.api_key_required and settings.is_development:
         return None
-    
+
     # Extraire la clé
     key = header_key or query_key
-    
+
     if not key:
         # Vérifier si l'auth est requise
         if settings.api_key_required:
@@ -114,13 +115,13 @@ async def get_api_key(
                 headers={"WWW-Authenticate": "ApiKey"},
             )
         return None
-    
+
     # Valider la clé
     repo = get_api_key_repo()
     client_ip = _get_client_ip(request)
-    
+
     validation = repo.validate(key, client_ip)
-    
+
     if validation is None:
         logger.warning("API key validation failed", client_ip=client_ip)
         raise HTTPException(
@@ -130,21 +131,21 @@ async def get_api_key(
                 "message": "Clé API invalide.",
             },
         )
-    
+
     if not validation.is_valid:
         logger.warning(
             "API key rejected",
             key_id=str(validation.key_id),
             reason=validation.rejection_reason,
         )
-        
+
         status_code = 403
         error_messages = {
             "key_revoked": "Cette clé API a été révoquée.",
             "key_expired": "Cette clé API a expiré.",
             "quota_exceeded": "Quota mensuel dépassé pour cette clé.",
         }
-        
+
         raise HTTPException(
             status_code=status_code,
             detail={
@@ -155,37 +156,34 @@ async def get_api_key(
                 ),
             },
         )
-    
+
     # ===== 3. Rate Limiting =====
     rate_limiter = get_rate_limiter()
-    
+
     # On limite par ID de clé si présent, sinon par IP (fallback/public)
     limit_id = f"key:{validation.key_id}" if validation else f"ip:{client_ip}"
     limit_value = validation.rate_limit if validation else settings.rate_limit_requests
-    
-    allowed, count, retry_after = await rate_limiter.is_allowed(
-        key=limit_id,
-        limit=limit_value
-    )
-    
+
+    allowed, count, retry_after = await rate_limiter.is_allowed(key=limit_id, limit=limit_value)
+
     if not allowed:
         raise HTTPException(
             status_code=429,
             detail={
                 "error": "rate_limit_exceeded",
                 "message": f"Limite de requêtes dépassée. Réessayez dans {retry_after} secondes.",
-                "retry_after": retry_after
+                "retry_after": retry_after,
             },
-            headers={"Retry-After": str(retry_after)}
+            headers={"Retry-After": str(retry_after)},
         )
-    
+
     # Stocker les infos dans request.state pour logging et middleware
     request.state.api_key = validation
     request.state.request_start_time = time.time()
     request.state.rate_limit_count = count
     request.state.rate_limit_max = limit_value
     request.state.rate_limit_retry_after = retry_after
-    
+
     if validation:
         logger.debug(
             "API key validated",
@@ -194,7 +192,7 @@ async def get_api_key(
             rate_count=count,
             model_id=validation.model_id,
         )
-    
+
     return validation
 
 
@@ -203,18 +201,18 @@ async def require_api_key(
 ) -> ApiKeyValidation:
     """
     Dépendance qui EXIGE une clé API valide.
-    
+
     À utiliser sur les endpoints protégés.
-    
+
     Args:
         api_key: Résultat de get_api_key.
-        
+
     Returns:
         ApiKeyValidation avec les informations de la clé.
-        
+
     Raises:
         HTTPException 401: Si pas de clé valide.
-        
+
     Example:
         >>> @router.get("/protected")
         >>> async def protected_endpoint(
@@ -236,13 +234,13 @@ async def require_api_key(
 def require_scope(scope: str | ApiKeyScope) -> Callable:
     """
     Factory pour créer une dépendance qui vérifie un scope spécifique.
-    
+
     Args:
         scope: Scope requis (ex: "admin", "ingest").
-        
+
     Returns:
         Dépendance FastAPI à utiliser avec Depends().
-        
+
     Example:
         >>> @router.delete("/keys/{key_id}")
         >>> async def delete_key(
@@ -253,7 +251,7 @@ def require_scope(scope: str | ApiKeyScope) -> Callable:
         ...     pass
     """
     scope_value = scope.value if isinstance(scope, ApiKeyScope) else scope
-    
+
     async def scope_checker(
         api_key: ApiKeyValidation = Depends(require_api_key),
     ) -> ApiKeyValidation:
@@ -275,20 +273,20 @@ def require_scope(scope: str | ApiKeyScope) -> Callable:
                 },
             )
         return api_key
-    
+
     return scope_checker
 
 
 def require_any_scope(*scopes: str | ApiKeyScope) -> Callable:
     """
     Factory pour vérifier qu'au moins un des scopes est présent.
-    
+
     Args:
         *scopes: Scopes acceptés.
-        
+
     Returns:
         Dépendance FastAPI.
-        
+
     Example:
         >>> @router.post("/data")
         >>> async def upload_data(
@@ -296,11 +294,8 @@ def require_any_scope(*scopes: str | ApiKeyScope) -> Callable:
         ... ):
         ...     pass
     """
-    scope_values = [
-        s.value if isinstance(s, ApiKeyScope) else s
-        for s in scopes
-    ]
-    
+    scope_values = [s.value if isinstance(s, ApiKeyScope) else s for s in scopes]
+
     async def scope_checker(
         api_key: ApiKeyValidation = Depends(require_api_key),
     ) -> ApiKeyValidation:
@@ -316,29 +311,31 @@ def require_any_scope(*scopes: str | ApiKeyScope) -> Callable:
                 },
             )
         return api_key
-    
+
     return scope_checker
 
 
 # ===== Helpers =====
 
+
 def _get_client_ip(request: Request) -> str:
     """
     Extrait l'adresse IP du client.
-    
+
     Gère les proxies via X-Forwarded-For.
     """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
         return forwarded.split(",")[0].strip()
-    
+
     if request.client:
         return request.client.host
-    
+
     return "unknown"
 
 
 # ===== Master Key Validation =====
+
 
 async def require_master_key(
     request: Request,
@@ -346,15 +343,15 @@ async def require_master_key(
 ) -> bool:
     """
     Vérifie la master key pour les opérations initiales.
-    
+
     La master key est définie dans .env et permet de créer
     les premières clés API.
-    
+
     Raises:
         HTTPException 401: Si la master key est invalide.
     """
     settings = get_settings()
-    
+
     if not settings.api_master_key:
         raise HTTPException(
             status_code=500,
@@ -363,7 +360,7 @@ async def require_master_key(
                 "message": "API_MASTER_KEY non configurée dans .env",
             },
         )
-    
+
     if header_key != settings.api_master_key:
         raise HTTPException(
             status_code=401,
@@ -372,5 +369,5 @@ async def require_master_key(
                 "message": "Master key invalide.",
             },
         )
-    
+
     return True

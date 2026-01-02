@@ -9,21 +9,22 @@ Prefix: /api/v1/console
 """
 
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.api.deps import CurrentUser
 from src.config.logging_config import get_logger
 from src.models.api_key import (
     ApiKeyCreate,
-    ApiKeyResponse,
     ApiKeyListResponse,
+    ApiKeyResponse,
 )
+from src.repositories.subscription_repository import SubscriptionRepository
 from src.services.api_key_service import (
     ApiKeyService,
     QuotaExceededError,
     get_api_key_service,
 )
-from src.repositories.subscription_repository import SubscriptionRepository
 
 logger = get_logger(__name__)
 
@@ -34,10 +35,13 @@ router = APIRouter(
 
 # ===== Dependencies =====
 
+
 def get_sub_repo() -> SubscriptionRepository:
     return SubscriptionRepository()
 
+
 # ===== API Keys Endpoints =====
+
 
 @router.get(
     "/keys",
@@ -58,13 +62,14 @@ async def list_my_keys(
         per_page=per_page,
         include_inactive=include_inactive,
     )
-    
+
     return ApiKeyListResponse(
         keys=keys,
         total=total,
         page=page,
         per_page=per_page,
     )
+
 
 @router.post(
     "/keys",
@@ -79,17 +84,14 @@ async def create_my_key(
 ) -> ApiKeyResponse:
     """
     Crée une nouvelle clé API pour l'utilisateur courant.
-    
+
     ⚠️ IMPORTANT: La clé complète n'est retournée qu'une seule fois.
     Sauvegardez-la immédiatement, elle ne sera plus jamais affichée.
     """
     try:
         # Convertir les scopes enum en strings si nécessaire
-        scopes = [
-            s.value if hasattr(s, 'value') else str(s) 
-            for s in request.scopes
-        ]
-        
+        scopes = [s.value if hasattr(s, "value") else str(s) for s in request.scopes]
+
         result = await service.create_user_key(
             user_id=str(user.id),
             name=request.name,
@@ -98,7 +100,7 @@ async def create_my_key(
             expires_in_days=request.expires_in_days,
             agent_id=str(request.agent_id) if request.agent_id else None,
         )
-        
+
         return ApiKeyResponse(
             id=result.key_info.id,
             agent_id=result.key_info.agent_id,
@@ -111,7 +113,7 @@ async def create_my_key(
             expires_at=result.key_info.expires_at,
             created_at=result.key_info.created_at,
         )
-        
+
     except QuotaExceededError as e:
         raise HTTPException(
             status_code=403,
@@ -119,7 +121,7 @@ async def create_my_key(
                 "error": "quota_exceeded",
                 "message": e.message,
                 "limits": e.limits,
-            }
+            },
         )
     except ValueError as e:
         raise HTTPException(
@@ -127,17 +129,18 @@ async def create_my_key(
             detail={
                 "error": "invalid_request",
                 "message": str(e),
-            }
+            },
         )
     except Exception as e:
         logger.error("Failed to create user key", error=str(e), user_id=str(user.id))
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail={
                 "error": "internal_error",
                 "message": "Erreur lors de la création de la clé",
-            }
+            },
         )
+
 
 @router.delete(
     "/keys/{key_id}",
@@ -154,15 +157,16 @@ async def revoke_my_key(
         user_id=str(user.id),
         key_id=str(key_id),
     )
-    
+
     if not success:
         raise HTTPException(
-            status_code=404, 
+            status_code=404,
             detail={
                 "error": "not_found",
                 "message": "Clé introuvable ou déjà révoquée",
-            }
+            },
         )
+
 
 @router.get(
     "/keys/{key_id}/stats",
@@ -176,19 +180,21 @@ async def get_key_stats(
 ):
     """Récupère les statistiques d'utilisation d'une clé."""
     stats = service.get_key_stats(str(key_id), days)
-    
+
     if not stats:
         raise HTTPException(
             status_code=404,
             detail={
                 "error": "not_found",
                 "message": "Clé introuvable ou pas de statistiques",
-            }
+            },
         )
-    
+
     return stats
 
+
 # ===== Usage Endpoint =====
+
 
 @router.get("/usage", summary="Mon usage")
 async def get_my_usage(
@@ -197,13 +203,13 @@ async def get_my_usage(
     """Récupère les statistiques d'usage de l'utilisateur."""
     sub_repo = get_sub_repo()
     usage = sub_repo.get_user_usage(str(user.id))
-    
+
     # Base response with plan from user
     base_response = {
         "plan": user.plan_slug,
         "subscription_status": user.subscription_status,
     }
-    
+
     if not usage:
         return {
             **base_response,
@@ -215,7 +221,7 @@ async def get_my_usage(
             "api_keys_count": 0,
             "api_keys_limit": user.api_keys_limit,
         }
-    
+
     # Merge usage stats with plan info
     return {
         **usage.model_dump(),

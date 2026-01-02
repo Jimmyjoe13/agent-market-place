@@ -8,8 +8,9 @@ Version 2 avec orchestration intelligente, multi-providers et streaming.
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any
 from uuid import uuid4
 
 from src.agents.perplexity_agent import PerplexityAgent, WebSearchResult
@@ -20,33 +21,28 @@ from src.models.conversation import (
     ConversationCreate,
     ConversationMetadata,
 )
-from src.models.document import DocumentMatch
 from src.providers.llm import (
-    LLMProviderFactory,
-    LLMConfig,
-    LLMResponse,
-    StreamChunk,
     BaseLLMProvider,
+    LLMConfig,
+    LLMProviderFactory,
 )
 from src.repositories.conversation_repository import ConversationRepository
 from src.repositories.document_repository import DocumentRepository
 from src.repositories.user_repository import UserRepository
+from src.services.circuit_breaker import get_circuit_breaker
 from src.services.embedding_service import EmbeddingService
 from src.services.orchestrator import (
-    QueryOrchestrator,
     RoutingDecision,
-    QueryIntent,
     get_orchestrator,
 )
-from src.services.circuit_breaker import get_circuit_breaker, CircuitBreaker
-from src.services.trace_service import get_trace_service, TraceService
+from src.services.trace_service import get_trace_service
 
 
 @dataclass
 class RAGResponse:
     """
     Réponse générée par le RAG Engine.
-    
+
     Attributes:
         answer: Réponse textuelle générée.
         sources: Sources utilisées (vectorielles + web).
@@ -55,6 +51,7 @@ class RAGResponse:
         thought_process: Processus de réflexion (si mode réflexion activé).
         routing: Décision de routage utilisée.
     """
+
     answer: str
     sources: list[ContextSource]
     conversation_id: str | None
@@ -66,31 +63,31 @@ class RAGResponse:
 @dataclass
 class RAGConfig:
     """Configuration du RAG Engine."""
-    
+
     # Recherche vectorielle
     vector_threshold: float = 0.7
     vector_max_results: int = 5
-    
+
     # Recherche web
     use_web_search: bool = True
     web_max_tokens: int = 1024
-    
+
     # Génération
     llm_model: str = "mistral-large-latest"
     llm_provider: str = "mistral"
     llm_temperature: float = 0.7
     llm_max_tokens: int = 4096
-    
+
     # Orchestration
     use_smart_routing: bool = True
-    
+
     # Mode réflexion
     enable_reflection: bool = False
     reflection_depth: int = 1
-    
+
     # Streaming
     enable_streaming: bool = False
-    
+
     # Logging
     log_conversations: bool = True
 
@@ -98,7 +95,7 @@ class RAGConfig:
 class RAGEngine(LoggerMixin):
     """
     Moteur RAG principal V2.
-    
+
     Orchestre le pipeline complet avec routage intelligent:
     1. Analyse de l'intention (Orchestrateur)
     2. Recherche conditionnelle (RAG si nécessaire)
@@ -106,14 +103,14 @@ class RAGEngine(LoggerMixin):
     4. Fusion des contextes
     5. Génération de la réponse (multi-provider)
     6. Logging de la conversation
-    
+
     Optimisations:
     - Routage intelligent pour éviter les appels inutiles
     - Support multi-providers (Mistral, OpenAI, Gemini)
     - Mode streaming pour une meilleure UX
     - Mode réflexion pour des réponses approfondies
     """
-    
+
     DEFAULT_SYSTEM_PROMPT = """Tu es un copilote intelligent et bienveillant. Tu parles comme un collègue compétent, pas comme un robot.
 
 ## Ton Style
@@ -142,11 +139,11 @@ Tu as accès à des informations personnelles (CV, projets GitHub, profils) et d
 
 ## Langue
 Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie sinon."""
-    
+
     def __init__(self, config: RAGConfig | None = None) -> None:
         """
         Initialise le RAG Engine.
-        
+
         Args:
             config: Configuration personnalisée.
         """
@@ -158,7 +155,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             llm_temperature=settings.llm_temperature,
             llm_max_tokens=settings.llm_max_tokens,
         )
-        
+
         # Services
         self._llm_factory = LLMProviderFactory()
         self._orchestrator = get_orchestrator()
@@ -169,23 +166,23 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         self._perplexity = PerplexityAgent()
         self._trace_service = get_trace_service()
         self._breaker = get_circuit_breaker()
-        
+
         # Provider LLM principal
         self._llm_provider: BaseLLMProvider | None = None
-        
+
         # Session courante
         self._session_id = str(uuid4())
-    
+
     @property
     def session_id(self) -> str:
         """ID de la session courante."""
         return self._session_id
-    
+
     def new_session(self) -> str:
         """Crée une nouvelle session."""
         self._session_id = str(uuid4())
         return self._session_id
-    
+
     def _get_llm_provider(self) -> BaseLLMProvider:
         """Récupère ou crée le provider LLM."""
         if self._llm_provider is None:
@@ -201,7 +198,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 llm_config,
             )
         return self._llm_provider
-    
+
     # Modèles de secours par défaut si le modèle principal échoue
     FALLBACK_MODELS = {
         "openai": "gpt-4o-mini",
@@ -209,11 +206,11 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         "anthropic": "claude-3-haiku-20240307",
         "gemini": "gemini-1.5-flash",
     }
-    
+
     def _detect_provider_from_model(self, model_id: str) -> str:
         """Détecte le provider à partir du model_id."""
         model_lower = model_id.lower()
-        
+
         if model_lower.startswith("gpt") or model_lower.startswith("o1"):
             return "openai"
         elif model_lower.startswith("deepseek"):
@@ -226,34 +223,35 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             # Default to Mistral for mistral-* and unknown models
             return "mistral"
 
-    def _get_fallback_provider(self, current_provider_type: str, user_id: str | None = None) -> BaseLLMProvider:
+    def _get_fallback_provider(
+        self, current_provider_type: str, user_id: str | None = None
+    ) -> BaseLLMProvider:
         """Récupère un provider de secours en cas de panne du provider principal."""
         # On essaie d'utiliser Mistral comme fallback universel car c'est notre moteur par défaut
         # sauf si on est déjà sur Mistral, alors on utilise OpenAI mini
         fallback_type = "openai" if current_provider_type == "mistral" else "mistral"
         fallback_model = self.FALLBACK_MODELS.get(fallback_type, "gpt-4o-mini")
-        
-        self.logger.info("Getting fallback provider", current=current_provider_type, fallback=fallback_type)
-        
+
+        self.logger.info(
+            "Getting fallback provider", current=current_provider_type, fallback=fallback_type
+        )
+
         user_keys = {}
         if user_id:
             user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
-        
+
         api_key = user_keys.get(fallback_type)
-        
+
         llm_config = LLMConfig(
             model=fallback_model,
             temperature=self.config.llm_temperature,
             max_tokens=self.config.llm_max_tokens,
         )
-        
+
         return self._llm_factory.get_provider(
-            fallback_type,
-            llm_config,
-            cache=False,
-            api_key=api_key
+            fallback_type, llm_config, cache=False, api_key=api_key
         )
-    
+
     async def query_async(
         self,
         question: str,
@@ -267,7 +265,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
     ) -> RAGResponse:
         """
         Traite une requête de manière asynchrone avec routage intelligent.
-        
+
         Args:
             question: Question de l'utilisateur.
             system_prompt: Prompt système personnalisé.
@@ -277,23 +275,27 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             user_id: ID utilisateur pour l'isolation contextuelle.
             api_key_id: ID de la clé API/agent pour isolation documents.
             model_id: Modèle LLM à utiliser (override agent_config).
-            
+
         Returns:
             RAGResponse avec la réponse et les sources.
         """
         start_time = time.time()
         sources: list[ContextSource] = []
-        
+
         self.logger.info("Processing query", query_length=len(question))
-        
+
         # 1. Routage intelligent
         routing = await self._orchestrator.route(
             question,
             force_rag=use_rag if use_rag is not None else False,
             force_web=use_web if use_web is not None else False,
-            force_reflection=enable_reflection if enable_reflection is not None else self.config.enable_reflection,
+            force_reflection=(
+                enable_reflection
+                if enable_reflection is not None
+                else self.config.enable_reflection
+            ),
         )
-        
+
         self.logger.info(
             "Routing decision",
             intent=routing.intent.value,
@@ -302,7 +304,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             confidence=routing.confidence,
             routing_latency_ms=routing.latency_ms,
         )
-        
+
         # 2. Recherche vectorielle (si nécessaire)
         vector_context = ""
         if routing.should_use_rag:
@@ -310,22 +312,24 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 question, user_id, api_key_id
             )
             sources.extend(vector_sources)
-        
+
         # 3. Recherche web (si nécessaire)
         web_context = ""
         if routing.should_use_web:
             web_result = await self._search_web(question)
             if web_result:
                 web_context = web_result.content
-                sources.append(ContextSource(
-                    source_type="perplexity",
-                    content_preview=web_context[:500],
-                    url=web_result.sources[0] if web_result.sources else None,
-                ))
-        
+                sources.append(
+                    ContextSource(
+                        source_type="perplexity",
+                        content_preview=web_context[:500],
+                        url=web_result.sources[0] if web_result.sources else None,
+                    )
+                )
+
         # 4. Construire le contexte fusionné
         full_context = self._build_context(vector_context, web_context)
-        
+
         # 5. Générer la réponse
         # Utiliser le model_id agent si fourni
         if model_id:
@@ -337,29 +341,26 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 max_tokens=self.config.llm_max_tokens,
                 enable_reflection=routing.use_reflection,
             )
-            
+
             # Récupérer les clés de l'utilisateur si disponibles (BYOK)
             user_keys = {}
             if user_id:
                 user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
-            
+
             provider_api_key = user_keys.get(provider_type)
-            
+
             provider = self._llm_factory.get_provider(
-                provider_type, 
-                llm_config, 
-                cache=False, 
-                api_key=provider_api_key
+                provider_type, llm_config, cache=False, api_key=provider_api_key
             )
         else:
             # Récupérer les clés de l'utilisateur pour le provider par défaut
             user_keys = {}
             if user_id:
                 user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
-            
+
             provider_type = self.config.llm_provider
             provider_api_key = user_keys.get(provider_type)
-            
+
             llm_config = LLMConfig(
                 model=self.config.llm_model,
                 temperature=self.config.llm_temperature,
@@ -367,20 +368,17 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 enable_reflection=routing.use_reflection,
                 stream=self.config.enable_streaming,
             )
-            
+
             provider = self._llm_factory.get_provider(
-                provider_type,
-                llm_config,
-                cache=False,
-                api_key=provider_api_key
+                provider_type, llm_config, cache=False, api_key=provider_api_key
             )
-        
+
         messages = provider.build_messages(
             question,
             context=full_context if full_context else None,
             system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
         )
-        
+
         # 5. Exécution avec Circuit Breaker et Fallback
         async def call_llm(p: BaseLLMProvider):
             if routing.use_reflection:
@@ -392,7 +390,9 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 )
 
         async def fallback_call():
-            self.logger.warning("Primary provider failing, attempting fallback", provider=provider_type)
+            self.logger.warning(
+                "Primary provider failing, attempting fallback", provider=provider_type
+            )
             fallback_p = self._get_fallback_provider(provider_type, user_id=user_id)
             # Re-construire les messages pour le nouveau provider (au cas où le format change)
             fallback_messages = fallback_p.build_messages(
@@ -404,20 +404,18 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
 
         try:
             llm_response = await self._breaker.execute(
-                provider_type,
-                lambda: call_llm(provider),
-                fallback=fallback_call
+                provider_type, lambda: call_llm(provider), fallback=fallback_call
             )
         except Exception as e:
             self.logger.error("LLM Generation failed even with fallback", error=str(e))
             raise
-        
+
         answer = llm_response.content
         thought_process = llm_response.thought_process
-        
+
         # 6. Calculer les métriques
         elapsed_ms = int((time.time() - start_time) * 1000)
-        
+
         # 7. Logger la conversation
         conversation_id = None
         if self.config.log_conversations:
@@ -434,7 +432,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 thought_process=thought_process,
                 routing_decision=routing,
             )
-        
+
         self.logger.info(
             "Query completed",
             elapsed_ms=elapsed_ms,
@@ -443,7 +441,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             tokens_output=llm_response.tokens_output,
             routing_intent=routing.intent.value,
         )
-        
+
         return RAGResponse(
             answer=answer,
             sources=sources,
@@ -462,7 +460,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             thought_process=thought_process,
             routing=routing,
         )
-    
+
     async def query_stream(
         self,
         question: str,
@@ -476,7 +474,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Traite une requête en mode streaming.
-        
+
         Émet des événements SSE pour chaque étape:
         - routing: Décision de routage
         - search_start: Début d'une recherche
@@ -484,7 +482,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         - chunk: Morceau de réponse
         - thought: Pensée interne (mode réflexion)
         - complete: Réponse terminée
-        
+
         Args:
             question: Question de l'utilisateur.
             system_prompt: Prompt système personnalisé.
@@ -492,23 +490,27 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             use_rag: Forcer le RAG.
             enable_reflection: Mode réflexion.
             user_id: ID utilisateur.
-            
+
         Yields:
             Dictionnaires d'événements SSE.
         """
         start_time = time.time()
         sources: list[ContextSource] = []
-        
+
         # 1. Routage
         yield {"event": "routing", "data": {"status": "started"}}
-        
+
         routing = await self._orchestrator.route(
             question,
             force_rag=use_rag if use_rag is not None else False,
             force_web=use_web if use_web is not None else False,
-            force_reflection=enable_reflection if enable_reflection is not None else self.config.enable_reflection,
+            force_reflection=(
+                enable_reflection
+                if enable_reflection is not None
+                else self.config.enable_reflection
+            ),
         )
-        
+
         yield {
             "event": "routing",
             "data": {
@@ -519,11 +521,11 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 "confidence": routing.confidence,
             },
         }
-        
+
         # 2. Recherches parallèles si nécessaire
         vector_context = ""
         web_context = ""
-        
+
         async def search_rag():
             nonlocal vector_context, sources
             if routing.should_use_rag:
@@ -535,7 +537,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                     "event": "search_complete",
                     "data": {"type": "rag", "results": len(src)},
                 }
-        
+
         async def search_web():
             nonlocal web_context, sources
             if routing.should_use_web:
@@ -543,20 +545,22 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 result = await self._search_web(question)
                 if result:
                     web_context = result.content
-                    sources.append(ContextSource(
-                        source_type="perplexity",
-                        content_preview=web_context[:500],
-                        url=result.sources[0] if result.sources else None,
-                    ))
+                    sources.append(
+                        ContextSource(
+                            source_type="perplexity",
+                            content_preview=web_context[:500],
+                            url=result.sources[0] if result.sources else None,
+                        )
+                    )
                 yield {
                     "event": "search_complete",
                     "data": {"type": "web", "found": bool(result)},
                 }
-        
+
         # 2. Recherches
         vector_context = ""
         web_context = ""
-        
+
         if routing.should_use_rag:
             yield {"event": "search_start", "data": {"type": "rag"}}
             vector_context, vector_sources = await self._search_vector_store(
@@ -567,27 +571,29 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 "event": "search_complete",
                 "data": {"type": "rag", "results": len(vector_sources)},
             }
-        
+
         if routing.should_use_web:
             yield {"event": "search_start", "data": {"type": "web"}}
             web_result = await self._search_web(question)
             if web_result:
                 web_context = web_result.content
-                sources.append(ContextSource(
-                    source_type="perplexity",
-                    content_preview=web_context[:500],
-                    url=web_result.sources[0] if web_result.sources else None,
-                ))
+                sources.append(
+                    ContextSource(
+                        source_type="perplexity",
+                        content_preview=web_context[:500],
+                        url=web_result.sources[0] if web_result.sources else None,
+                    )
+                )
             yield {
                 "event": "search_complete",
                 "data": {"type": "web", "found": bool(web_result)},
             }
-        
+
         # 3. Génération en streaming
         yield {"event": "generation_start", "data": {}}
-        
+
         full_context = self._build_context(vector_context, web_context)
-        
+
         # Déterminer le provider (BYOK ou global)
         if model_id:
             provider_type = self._detect_provider_from_model(model_id)
@@ -598,16 +604,18 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
 
         # Vérifier le circuit breaker avant de commencer
         if self._breaker.is_open(provider_type):
-            self.logger.warning("Circuit is OPEN for primary provider, forcing fallback", provider=provider_type)
+            self.logger.warning(
+                "Circuit is OPEN for primary provider, forcing fallback", provider=provider_type
+            )
             provider = self._get_fallback_provider(provider_type, user_id=user_id)
             provider_type = provider.provider_name.value
         else:
             user_keys = {}
             if user_id:
                 user_keys = self._user_repo.get_decrypted_provider_keys(user_id)
-            
+
             provider_api_key = user_keys.get(provider_type)
-            
+
             llm_config = LLMConfig(
                 model=current_model,
                 temperature=self.config.llm_temperature,
@@ -615,12 +623,9 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 enable_reflection=routing.use_reflection,
                 stream=True,
             )
-            
+
             provider = self._llm_factory.get_provider(
-                provider_type,
-                llm_config,
-                cache=False,
-                api_key=provider_api_key
+                provider_type, llm_config, cache=False, api_key=provider_api_key
             )
 
         messages = provider.build_messages(
@@ -628,11 +633,11 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             context=full_context if full_context else None,
             system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
         )
-        
+
         full_response = ""
         thought_content = ""
         has_started_content = False
-        
+
         try:
             async for chunk in provider.generate_stream(messages):
                 if chunk.is_thought:
@@ -648,14 +653,14 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                         "event": "chunk",
                         "data": {"content": chunk.content},
                     }
-            
+
             # Succès !
             await self._breaker._record_success(provider_type)
-            
+
         except Exception as e:
             await self._breaker._record_failure(provider_type, e)
             self.logger.error("Streaming error", provider=provider_type, error=str(e))
-            
+
             # Si on n'a pas encore envoyé de contenu, on peut tenter un fallback
             if not has_started_content:
                 self.logger.warning("Error before content started, attempting streaming fallback")
@@ -675,14 +680,20 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                             yield {"event": "chunk", "data": {"content": chunk.content}}
                 except Exception as fallback_err:
                     self.logger.error("Streaming fallback failed", error=str(fallback_err))
-                    yield {"event": "error", "data": {"message": "Désolé, le service est temporairement indisponible."}}
+                    yield {
+                        "event": "error",
+                        "data": {"message": "Désolé, le service est temporairement indisponible."},
+                    }
             else:
                 # Trop tard pour le fallback, on informe l'utilisateur
-                yield {"event": "error", "data": {"message": "La connexion a été interrompue. Veuillez réessayer."}}
-        
+                yield {
+                    "event": "error",
+                    "data": {"message": "La connexion a été interrompue. Veuillez réessayer."},
+                }
+
         # 4. Finalisation
         elapsed_ms = int((time.time() - start_time) * 1000)
-        
+
         # Logger la conversation
         conversation_id = None
         if self.config.log_conversations:
@@ -695,7 +706,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 user_id,
                 thought_process=thought_content if thought_content else None,
             )
-        
+
         yield {
             "event": "complete",
             "data": {
@@ -715,7 +726,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 },
             },
         }
-    
+
     def query(
         self,
         question: str,
@@ -724,27 +735,24 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
     ) -> RAGResponse:
         """
         Version synchrone de query_async.
-        
+
         Args:
             question: Question de l'utilisateur.
             system_prompt: Prompt système personnalisé.
             use_web: Forcer/désactiver la recherche web.
-            
+
         Returns:
             RAGResponse avec la réponse et les sources.
         """
-        import asyncio
-        
+
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        
-        return loop.run_until_complete(
-            self.query_async(question, system_prompt, use_web)
-        )
-    
+
+        return loop.run_until_complete(self.query_async(question, system_prompt, use_web))
+
     async def _search_vector_store(
         self,
         query: str,
@@ -755,7 +763,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         try:
             # Générer l'embedding de la requête
             query_embedding = self._embedding_service.embed_query(query)
-            
+
             # Rechercher les documents similaires (filtrés par api_key_id si fourni)
             matches = self._document_repo.search_similar(
                 query_embedding,
@@ -764,34 +772,36 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 user_id=user_id,
                 api_key_id=api_key_id,  # Isolation par agent
             )
-            
+
             if not matches:
                 return "", []
-            
+
             # Construire le contexte
             context_parts = []
             sources = []
-            
+
             for match in matches:
                 context_parts.append(match.content)
-                sources.append(ContextSource(
-                    source_type="vector_store",
-                    document_id=match.id,
-                    content_preview=match.content[:300],
-                    similarity_score=match.similarity,
-                ))
-            
+                sources.append(
+                    ContextSource(
+                        source_type="vector_store",
+                        document_id=match.id,
+                        content_preview=match.content[:300],
+                        similarity_score=match.similarity,
+                    )
+                )
+
             return "\n\n---\n\n".join(context_parts), sources
-            
+
         except Exception as e:
             self.logger.error("Vector search failed", error=str(e))
             return "", []
-    
+
     async def _search_web(self, query: str) -> WebSearchResult | None:
         """Recherche web via Perplexity."""
         if not self._perplexity.is_enabled:
             return None
-        
+
         try:
             return await self._perplexity.search(
                 query,
@@ -800,7 +810,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         except Exception as e:
             self.logger.error("Web search failed", error=str(e))
             return None
-    
+
     def _build_context(
         self,
         vector_context: str,
@@ -808,17 +818,21 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
     ) -> str:
         """Fusionne les contextes."""
         parts = []
-        
+
         if vector_context:
-            parts.append(f"""=== CONTEXTE PERSONNEL ===
-{vector_context}""")
-        
+            parts.append(
+                f"""=== CONTEXTE PERSONNEL ===
+{vector_context}"""
+            )
+
         if web_context:
-            parts.append(f"""=== INFORMATIONS WEB RÉCENTES ===
-{web_context}""")
-        
+            parts.append(
+                f"""=== INFORMATIONS WEB RÉCENTES ===
+{web_context}"""
+            )
+
         return "\n\n".join(parts) if parts else ""
-    
+
     async def _log_conversation(
         self,
         question: str,
@@ -844,7 +858,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                     "latency_ms": routing_decision.latency_ms,
                     "reasoning": routing_decision.reasoning,
                 }
-            
+
             conv = ConversationCreate(
                 session_id=self._session_id,
                 user_query=question,
@@ -856,25 +870,27 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                     tokens_input=tokens.get("input", 0),
                     tokens_output=tokens.get("output", 0),
                     response_time_ms=elapsed_ms,
-                    perplexity_used=any(
-                        s.source_type == "perplexity" for s in sources
-                    ),
-                    vector_results_count=sum(
-                        1 for s in sources if s.source_type == "vector_store"
-                    ),
+                    perplexity_used=any(s.source_type == "perplexity" for s in sources),
+                    vector_results_count=sum(1 for s in sources if s.source_type == "vector_store"),
                     # Données de réflexion
-                    reflection_data={
-                        "thought_process": thought_process,
-                    } if thought_process else None,
+                    reflection_data=(
+                        {
+                            "thought_process": thought_process,
+                        }
+                        if thought_process
+                        else None
+                    ),
                     reflection_enabled=thought_process is not None,
                     # Données de routage
                     routing_info=routing_info,
-                    llm_provider=self.config.llm_provider if self.config.llm_provider else "mistral",
+                    llm_provider=(
+                        self.config.llm_provider if self.config.llm_provider else "mistral"
+                    ),
                 ),
             )
-            
+
             created = self._conversation_repo.log_conversation(conv)
-            
+
             # Aussi logger la trace de monitoring
             if user_id:
                 self._trace_service.log_success(
@@ -887,12 +903,12 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                     routing_decision=routing_info,
                     sources_count=len(sources),
                 )
-            
+
             return str(created.id)
-            
+
         except Exception as e:
             self.logger.error("Failed to log conversation", error=str(e))
-            
+
             # Logger l'erreur dans les traces si possible
             if user_id:
                 try:
@@ -906,5 +922,5 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                     )
                 except Exception:
                     pass  # Ne pas cascader les erreurs
-            
+
             return None

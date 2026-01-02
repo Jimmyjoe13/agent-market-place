@@ -17,7 +17,6 @@ Architecture v2:
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -26,14 +25,14 @@ from pydantic import BaseModel, Field, field_validator
 class ApiKeyScope(str, Enum):
     """
     Permissions disponibles pour les clés API.
-    
+
     Attributes:
         QUERY: Permet d'interroger le système RAG.
         INGEST: Permet d'ingérer des documents.
         FEEDBACK: Permet de soumettre des feedbacks.
         ADMIN: Accès complet, incluant la gestion des clés.
     """
-    
+
     QUERY = "query"
     INGEST = "ingest"
     FEEDBACK = "feedback"
@@ -43,10 +42,10 @@ class ApiKeyScope(str, Enum):
 class ApiKeyCreate(BaseModel):
     """
     Schéma pour la création d'une nouvelle clé API.
-    
+
     Une clé API est liée à un agent existant.
     Si agent_id n'est pas fourni, un agent par défaut sera créé.
-    
+
     Attributes:
         name: Nom descriptif de la clé.
         agent_id: ID de l'agent à associer (optionnel).
@@ -54,7 +53,7 @@ class ApiKeyCreate(BaseModel):
         rate_limit_per_minute: Limite de requêtes par minute.
         expires_in_days: Nombre de jours avant expiration.
     """
-    
+
     name: str = Field(
         ...,
         description="Nom descriptif de la clé API",
@@ -85,7 +84,7 @@ class ApiKeyCreate(BaseModel):
         le=365,
         examples=[30, 90, None],
     )
-    
+
     @field_validator("scopes")
     @classmethod
     def validate_scopes(cls, v: list[ApiKeyScope]) -> list[ApiKeyScope]:
@@ -98,11 +97,11 @@ class ApiKeyCreate(BaseModel):
 class ApiKeyResponse(BaseModel):
     """
     Réponse après création d'une clé API.
-    
+
     ⚠️ IMPORTANT: Le champ `key` n'est retourné qu'une seule fois
     lors de la création. Il doit être sauvegardé immédiatement.
     """
-    
+
     id: UUID = Field(..., description="Identifiant unique de la clé")
     agent_id: UUID = Field(..., description="Agent associé")
     name: str = Field(..., description="Nom descriptif")
@@ -121,18 +120,18 @@ class ApiKeyResponse(BaseModel):
     expires_at: datetime | None = Field(default=None)
     is_active: bool = Field(default=True)
     created_at: datetime = Field(...)
-    
+
     model_config = {"from_attributes": True}
 
 
 class ApiKeyInfo(BaseModel):
     """
     Informations sur une clé API (sans le secret).
-    
+
     Utilisé pour lister les clés existantes.
     Inclut les informations de base de l'agent associé.
     """
-    
+
     id: UUID = Field(..., description="Identifiant unique")
     agent_id: UUID = Field(..., description="Agent associé")
     name: str = Field(..., description="Nom descriptif")
@@ -143,23 +142,23 @@ class ApiKeyInfo(BaseModel):
     expires_at: datetime | None = Field(default=None)
     last_used_at: datetime | None = Field(default=None)
     created_at: datetime | None = Field(default=None)
-    
+
     # Info agent (chargée séparément)
     agent_name: str | None = Field(default=None, description="Nom de l'agent")
     agent_model_id: str = Field(default="mistral-large-latest", description="Modèle LLM")
     rag_enabled: bool = Field(default=True, description="RAG activé")
-    
+
     model_config = {"from_attributes": True}
 
 
 class ApiKeyValidation(BaseModel):
     """
     Résultat de la validation d'une clé API.
-    
+
     Contient l'ID de la clé, ses permissions, et la configuration
     de l'agent associé si la clé est valide.
     """
-    
+
     is_valid: bool = Field(..., description="La clé est-elle valide")
     key_id: UUID | None = Field(default=None, description="ID de la clé")
     agent_id: UUID | None = Field(default=None, description="ID de l'agent")
@@ -167,7 +166,7 @@ class ApiKeyValidation(BaseModel):
     scopes: list[str] = Field(default_factory=list, description="Permissions")
     rate_limit: int = Field(default=60, description="Limite par minute")
     rejection_reason: str | None = Field(default=None)
-    
+
     # Configuration agent (si valide)
     model_id: str | None = Field(default=None, description="Modèle LLM")
     system_prompt: str | None = Field(default=None, description="Prompt système")
@@ -179,7 +178,7 @@ class ApiKeyUsageStats(BaseModel):
     """
     Statistiques d'utilisation d'une clé API.
     """
-    
+
     total_requests: int = Field(default=0, ge=0)
     avg_response_time: float | None = Field(default=None, ge=0)
     error_rate: float = Field(default=0, ge=0, le=100)
@@ -189,7 +188,7 @@ class ApiKeyUsageStats(BaseModel):
 
 class ApiKeyListResponse(BaseModel):
     """Réponse paginée pour la liste des clés."""
-    
+
     keys: list[ApiKeyInfo] = Field(..., description="Liste des clés")
     total: int = Field(..., description="Nombre total de clés")
     page: int = Field(default=1, ge=1)
@@ -200,10 +199,10 @@ class ApiKeyListResponse(BaseModel):
 class AgentConfig(BaseModel):
     """
     [DEPRECATED] Utilisez src.models.agent.AgentConfig à la place.
-    
+
     Conservé pour compatibilité avec le code existant.
     """
-    
+
     model_id: str = Field(default="mistral-large-latest")
     system_prompt: str | None = Field(default=None, max_length=10000)
     rag_enabled: bool = Field(default=True)
@@ -212,7 +211,7 @@ class AgentConfig(BaseModel):
 
 class AgentConfigUpdate(BaseModel):
     """[DEPRECATED] Mise à jour via agent_id maintenant."""
-    
+
     model_id: str | None = None
     system_prompt: str | None = None
     rag_enabled: bool | None = None

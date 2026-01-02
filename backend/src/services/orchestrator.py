@@ -14,28 +14,27 @@ Objectif : Réduire la latence de 60-80% pour les requêtes simples.
 import asyncio
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 from src.config.logging_config import LoggerMixin
-from src.config.settings import get_settings
-from src.providers.llm import LLMProviderFactory, LLMConfig, LLMProvider
+from src.providers.llm import LLMConfig, LLMProvider, LLMProviderFactory
 
 
 class QueryIntent(str, Enum):
     """Types d'intentions de requête."""
-    GENERAL = "general"           # Question générale -> LLM seul
-    DOCUMENTS = "documents"       # Recherche dans docs privés -> RAG
-    WEB_SEARCH = "web_search"     # Info récente/actualité -> Web
-    HYBRID = "hybrid"             # Combinaison RAG + Web
-    GREETING = "greeting"         # Salutation simple -> Réponse rapide
+
+    GENERAL = "general"  # Question générale -> LLM seul
+    DOCUMENTS = "documents"  # Recherche dans docs privés -> RAG
+    WEB_SEARCH = "web_search"  # Info récente/actualité -> Web
+    HYBRID = "hybrid"  # Combinaison RAG + Web
+    GREETING = "greeting"  # Salutation simple -> Réponse rapide
 
 
 @dataclass
 class RoutingDecision:
     """Décision de routage du routeur intelligent."""
-    
+
     intent: QueryIntent
     use_rag: bool = False
     use_web: bool = False
@@ -43,15 +42,15 @@ class RoutingDecision:
     confidence: float = 0.0
     reasoning: str = ""
     latency_ms: int = 0
-    
+
     # Force overrides (depuis l'UI)
     force_rag: bool = False
     force_web: bool = False
-    
+
     @property
     def should_use_rag(self) -> bool:
         return self.use_rag or self.force_rag
-    
+
     @property
     def should_use_web(self) -> bool:
         return self.use_web or self.force_web
@@ -60,19 +59,19 @@ class RoutingDecision:
 @dataclass
 class OrchestratorConfig:
     """Configuration de l'orchestrateur."""
-    
+
     # Routage
     enable_smart_routing: bool = True
     router_model: str = "mistral-tiny"
     router_timeout_ms: int = 2000
-    
+
     # Seuils de confiance
     confidence_threshold: float = 0.7
-    
+
     # Fallback si le routeur échoue
     fallback_use_rag: bool = True
     fallback_use_web: bool = False
-    
+
     # Cache des décisions
     cache_decisions: bool = True
     cache_ttl_seconds: int = 300
@@ -81,11 +80,11 @@ class OrchestratorConfig:
 class QueryOrchestrator(LoggerMixin):
     """
     Orchestrateur intelligent de requêtes.
-    
+
     Analyse l'intention de l'utilisateur pour optimiser
     le chemin de traitement et réduire la latence.
     """
-    
+
     ROUTER_PROMPT = """Tu es un classificateur de requêtes. Analyse la question et détermine :
 1. S'il faut chercher dans des documents privés (CV, projets, notes personnelles)
 2. S'il faut chercher sur le web (actualités, infos récentes, données publiques)
@@ -105,33 +104,58 @@ Question : """
 
     # Patterns pour détection rapide (sans appel LLM)
     GREETING_PATTERNS = [
-        "bonjour", "salut", "hello", "hi", "hey", "coucou",
-        "bonsoir", "yo", "good morning", "good evening",
+        "bonjour",
+        "salut",
+        "hello",
+        "hi",
+        "hey",
+        "coucou",
+        "bonsoir",
+        "yo",
+        "good morning",
+        "good evening",
     ]
-    
+
     DOCUMENT_KEYWORDS = [
-        "mon cv", "mon profil", "mes projets", "mon expérience",
-        "mes compétences", "mon parcours", "dans mes documents",
-        "j'ai uploadé", "selon mes notes", "dans mon fichier",
+        "mon cv",
+        "mon profil",
+        "mes projets",
+        "mon expérience",
+        "mes compétences",
+        "mon parcours",
+        "dans mes documents",
+        "j'ai uploadé",
+        "selon mes notes",
+        "dans mon fichier",
     ]
-    
+
     WEB_KEYWORDS = [
-        "aujourd'hui", "récemment", "actualité", "dernières nouvelles",
-        "en 2024", "en 2025", "cette année", "cette semaine",
-        "prix actuel", "météo", "cours de", "latest", "recent",
+        "aujourd'hui",
+        "récemment",
+        "actualité",
+        "dernières nouvelles",
+        "en 2024",
+        "en 2025",
+        "cette année",
+        "cette semaine",
+        "prix actuel",
+        "météo",
+        "cours de",
+        "latest",
+        "recent",
     ]
-    
+
     def __init__(self, config: OrchestratorConfig | None = None) -> None:
         """
         Initialise l'orchestrateur.
-        
+
         Args:
             config: Configuration optionnelle.
         """
         self.config = config or OrchestratorConfig()
         self._factory = LLMProviderFactory()
         self._decision_cache: dict[str, tuple[RoutingDecision, float]] = {}
-    
+
     async def route(
         self,
         query: str,
@@ -141,19 +165,19 @@ Question : """
     ) -> RoutingDecision:
         """
         Détermine le meilleur chemin pour traiter une requête.
-        
+
         Args:
             query: Question de l'utilisateur.
             force_rag: Forcer l'utilisation du RAG.
             force_web: Forcer la recherche web.
             force_reflection: Forcer le mode réflexion.
-            
+
         Returns:
             RoutingDecision avec le chemin optimal.
         """
         start_time = time.time()
         query_lower = query.lower().strip()
-        
+
         # 1. Vérifier le cache
         if self.config.cache_decisions:
             cached = self._get_cached_decision(query_lower)
@@ -162,7 +186,7 @@ Question : """
                 cached.force_web = force_web
                 cached.use_reflection = cached.use_reflection or force_reflection
                 return cached
-        
+
         # 2. Détection rapide par patterns (évite l'appel LLM)
         quick_decision = self._quick_detect(query_lower)
         if quick_decision and quick_decision.confidence >= 0.9:
@@ -172,7 +196,7 @@ Question : """
             quick_decision.latency_ms = int((time.time() - start_time) * 1000)
             self._cache_decision(query_lower, quick_decision)
             return quick_decision
-        
+
         # 3. Routage intelligent via LLM (si activé)
         if self.config.enable_smart_routing:
             try:
@@ -185,7 +209,7 @@ Question : """
                 return decision
             except Exception as e:
                 self.logger.warning("Smart routing failed, using fallback", error=str(e))
-        
+
         # 4. Fallback
         return RoutingDecision(
             intent=QueryIntent.HYBRID,
@@ -198,14 +222,14 @@ Question : """
             force_rag=force_rag,
             force_web=force_web,
         )
-    
+
     def _quick_detect(self, query: str) -> RoutingDecision | None:
         """
         Détection rapide sans appel LLM.
-        
+
         Args:
             query: Question en minuscules.
-            
+
         Returns:
             RoutingDecision si détection sûre, None sinon.
         """
@@ -219,7 +243,7 @@ Question : """
                 confidence=0.95,
                 reasoning="Greeting detected",
             )
-        
+
         # Mots-clés documents personnels
         if any(kw in query for kw in self.DOCUMENT_KEYWORDS):
             return RoutingDecision(
@@ -230,7 +254,7 @@ Question : """
                 confidence=0.9,
                 reasoning="Personal document keywords detected",
             )
-        
+
         # Mots-clés recherche web
         if any(kw in query for kw in self.WEB_KEYWORDS):
             return RoutingDecision(
@@ -241,17 +265,17 @@ Question : """
                 confidence=0.85,
                 reasoning="Web search keywords detected",
             )
-        
+
         # Pas de détection sûre
         return None
-    
+
     async def _smart_route(self, query: str) -> RoutingDecision:
         """
         Routage intelligent via LLM.
-        
+
         Args:
             query: Question de l'utilisateur.
-            
+
         Returns:
             RoutingDecision basée sur l'analyse LLM.
         """
@@ -261,7 +285,7 @@ Question : """
             temperature=0.0,  # Déterministe
             max_tokens=150,
         )
-        
+
         try:
             provider = self._factory.get_provider(
                 LLMProvider.MISTRAL,
@@ -270,21 +294,21 @@ Question : """
         except Exception:
             # Fallback sur le provider par défaut
             provider = self._factory.get_provider()
-        
+
         # Générer la classification
         messages = [{"role": "user", "content": f"{self.ROUTER_PROMPT}{query}"}]
-        
+
         try:
             # Timeout pour le routage
             response = await asyncio.wait_for(
                 provider.generate(messages),
                 timeout=self.config.router_timeout_ms / 1000,
             )
-            
+
             # Parser le JSON
             result = self._parse_router_response(response.content)
             return result
-            
+
         except asyncio.TimeoutError:
             self.logger.warning("Router timeout, using quick detect or fallback")
             return self._quick_detect(query.lower()) or RoutingDecision(
@@ -294,14 +318,14 @@ Question : """
                 confidence=0.5,
                 reasoning="Router timeout",
             )
-    
+
     def _parse_router_response(self, content: str) -> RoutingDecision:
         """
         Parse la réponse JSON du routeur.
-        
+
         Args:
             content: Réponse du LLM.
-            
+
         Returns:
             RoutingDecision parsée.
         """
@@ -312,15 +336,15 @@ Question : """
                 content = content.split("```")[1]
                 if content.startswith("json"):
                     content = content[4:]
-            
+
             data = json.loads(content)
-            
+
             intent_str = data.get("intent", "general")
             try:
                 intent = QueryIntent(intent_str)
             except ValueError:
                 intent = QueryIntent.GENERAL
-            
+
             return RoutingDecision(
                 intent=intent,
                 use_rag=data.get("use_rag", False),
@@ -329,7 +353,7 @@ Question : """
                 confidence=float(data.get("confidence", 0.7)),
                 reasoning=data.get("reasoning", ""),
             )
-            
+
         except (json.JSONDecodeError, KeyError) as e:
             self.logger.warning("Failed to parse router response", error=str(e))
             return RoutingDecision(
@@ -339,7 +363,7 @@ Question : """
                 confidence=0.5,
                 reasoning="Parse error",
             )
-    
+
     def _get_cached_decision(self, query: str) -> RoutingDecision | None:
         """Récupère une décision du cache si valide."""
         if query in self._decision_cache:
@@ -350,11 +374,11 @@ Question : """
             else:
                 del self._decision_cache[query]
         return None
-    
+
     def _cache_decision(self, query: str, decision: RoutingDecision) -> None:
         """Met en cache une décision."""
         self._decision_cache[query] = (decision, time.time())
-        
+
         # Nettoyer le cache si trop grand
         if len(self._decision_cache) > 1000:
             # Supprimer les plus anciens
@@ -363,7 +387,7 @@ Question : """
                 key=lambda x: x[1][1],
             )
             self._decision_cache = dict(sorted_items[-500:])
-    
+
     def clear_cache(self) -> None:
         """Vide le cache des décisions."""
         self._decision_cache.clear()

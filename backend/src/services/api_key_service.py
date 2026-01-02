@@ -22,19 +22,15 @@ Usage:
 
 from dataclasses import dataclass
 from typing import Any
-from uuid import UUID
 
 from src.config.logging_config import get_logger
 from src.models.api_key import (
-    ApiKeyCreate,
     ApiKeyInfo,
-    ApiKeyResponse,
     ApiKeyScope,
     ApiKeyUsageStats,
 )
 from src.repositories.api_key_repository import ApiKeyRepository
 from src.repositories.subscription_repository import SubscriptionRepository
-
 
 logger = get_logger(__name__)
 
@@ -42,14 +38,14 @@ logger = get_logger(__name__)
 @dataclass
 class CreateKeyResult:
     """Résultat de création d'une clé API."""
-    
+
     raw_key: str  # Clé complète, affichée UNE SEULE FOIS
     key_info: ApiKeyInfo
 
 
 class QuotaExceededError(Exception):
     """Levée quand l'utilisateur a atteint sa limite de clés."""
-    
+
     def __init__(self, message: str, limits: dict[str, Any]):
         self.message = message
         self.limits = limits
@@ -59,17 +55,17 @@ class QuotaExceededError(Exception):
 class ApiKeyService:
     """
     Service pour la gestion des clés API.
-    
+
     Coordonne ApiKeyRepository et SubscriptionRepository
     pour appliquer les règles métier.
-    
+
     Attributes:
         FORBIDDEN_SCOPES_SELF_SERVICE: Scopes interdits pour les utilisateurs.
     """
-    
+
     # Scopes interdits pour le self-service (seul admin peut les attribuer)
     FORBIDDEN_SCOPES_SELF_SERVICE = frozenset([ApiKeyScope.ADMIN.value, "admin"])
-    
+
     def __init__(
         self,
         key_repo: ApiKeyRepository | None = None,
@@ -77,14 +73,14 @@ class ApiKeyService:
     ) -> None:
         """
         Initialise le service.
-        
+
         Args:
             key_repo: Repository API Keys (injection dépendance).
             sub_repo: Repository Subscriptions (injection dépendance).
         """
         self._key_repo = key_repo or ApiKeyRepository()
         self._sub_repo = sub_repo or SubscriptionRepository()
-    
+
     async def create_user_key(
         self,
         user_id: str,
@@ -96,17 +92,17 @@ class ApiKeyService:
     ) -> CreateKeyResult:
         """
         Crée une clé API pour un utilisateur avec vérification des quotas.
-        
+
         Architecture v2:
         - Une clé API est liée à un agent
         - Si agent_id n'est pas fourni, crée un agent par défaut
-        
+
         Règles métier appliquées :
         1. Vérifie que l'utilisateur n'a pas atteint sa limite de clés
         2. Filtre les scopes interdits (admin)
         3. Crée/utilise un agent
         4. Génère la clé via le repository
-        
+
         Args:
             user_id: UUID de l'utilisateur propriétaire.
             name: Nom descriptif de la clé.
@@ -114,17 +110,17 @@ class ApiKeyService:
             rate_limit_per_minute: Limite de requêtes par minute.
             expires_in_days: Expiration en jours (None = jamais).
             agent_id: UUID de l'agent à lier (optionnel).
-            
+
         Returns:
             CreateKeyResult contenant la clé brute et ses informations.
-            
+
         Raises:
             QuotaExceededError: Si l'utilisateur a atteint sa limite.
             ValueError: Si les paramètres sont invalides.
         """
         # 1. Vérifier les quotas utilisateur
         limits = self._sub_repo.check_user_limits(user_id, "api_key")
-        
+
         if not limits.get("allowed", False):
             reason = limits.get("reason", "quota_exceeded")
             logger.warning(
@@ -136,13 +132,10 @@ class ApiKeyService:
                 f"Limite de clés atteinte: {reason}",
                 limits=limits,
             )
-        
+
         # 2. Filtrer les scopes interdits (sécurité)
-        safe_scopes = [
-            s for s in scopes 
-            if s not in self.FORBIDDEN_SCOPES_SELF_SERVICE
-        ]
-        
+        safe_scopes = [s for s in scopes if s not in self.FORBIDDEN_SCOPES_SELF_SERVICE]
+
         if not safe_scopes:
             # Fallback sur query si tous les scopes demandés sont interdits
             safe_scopes = [ApiKeyScope.QUERY.value]
@@ -151,17 +144,17 @@ class ApiKeyService:
                 user_id=user_id,
                 requested_scopes=scopes,
             )
-        
+
         # 3. Gérer l'agent
         final_agent_id = agent_id
         if not final_agent_id:
             # Créer un agent par défaut ou utiliser le premier existant
-            from src.repositories.agent_repository import AgentRepository
             from src.models.agent import AgentCreate
-            
+            from src.repositories.agent_repository import AgentRepository
+
             agent_repo = AgentRepository()
             agents = agent_repo.get_by_user(user_id, active_only=True)
-            
+
             if agents:
                 final_agent_id = str(agents[0].id)
             else:
@@ -175,7 +168,7 @@ class ApiKeyService:
                 created_agent = agent_repo.create_agent(user_id, new_agent)
                 final_agent_id = str(created_agent.id)
                 logger.info("Auto-created agent for key", agent_id=final_agent_id, user_id=user_id)
-        
+
         # 4. Créer la clé via repository
         create_data = {
             "user_id": user_id,
@@ -185,9 +178,9 @@ class ApiKeyService:
             "rate_limit_per_minute": rate_limit_per_minute,
             "expires_in_days": expires_in_days,
         }
-        
+
         result = self._key_repo.create(create_data)
-        
+
         logger.info(
             "API key created for user",
             user_id=user_id,
@@ -196,7 +189,7 @@ class ApiKeyService:
             name=name,
             scopes=safe_scopes,
         )
-        
+
         # 5. Construire la réponse
         key_info = ApiKeyInfo(
             id=result["id"],
@@ -214,12 +207,12 @@ class ApiKeyService:
             agent_model_id=result.get("agent_model_id", "mistral-large-latest"),
             rag_enabled=result.get("rag_enabled", True),
         )
-        
+
         return CreateKeyResult(
             raw_key=result["key"],
             key_info=key_info,
         )
-    
+
     def list_user_keys(
         self,
         user_id: str,
@@ -229,13 +222,13 @@ class ApiKeyService:
     ) -> tuple[list[ApiKeyInfo], int]:
         """
         Liste les clés API d'un utilisateur.
-        
+
         Args:
             user_id: UUID de l'utilisateur.
             page: Numéro de page (1-indexed).
             per_page: Nombre de résultats par page.
             include_inactive: Inclure les clés révoquées.
-            
+
         Returns:
             Tuple (liste des clés, total).
         """
@@ -245,7 +238,7 @@ class ApiKeyService:
             per_page=per_page,
             include_inactive=include_inactive,
         )
-    
+
     def revoke_user_key(
         self,
         user_id: str,
@@ -253,40 +246,40 @@ class ApiKeyService:
     ) -> bool:
         """
         Révoque une clé appartenant à un utilisateur.
-        
+
         Args:
             user_id: UUID de l'utilisateur propriétaire.
             key_id: UUID de la clé à révoquer.
-            
+
         Returns:
             True si révoquée, False sinon.
-            
+
         Raises:
             PermissionError: Si la clé n'appartient pas à l'utilisateur.
         """
         # Vérifier appartenance
         key = self._key_repo.get_by_id(key_id)
-        
+
         if not key:
             logger.warning("Key not found for revocation", key_id=key_id)
             return False
-        
+
         # Note: ApiKeyInfo n'a pas user_id directement exposé,
         # on doit le vérifier via la base. Pour l'instant, on fait confiance
         # au fait que routes_console filtre déjà par user_id.
         # TODO: Ajouter user_id à ApiKeyInfo pour vérification côté service.
-        
+
         success = self._key_repo.revoke(key_id)
-        
+
         if success:
             logger.info(
                 "API key revoked by user",
                 user_id=user_id,
                 key_id=key_id,
             )
-        
+
         return success
-    
+
     def get_key_stats(
         self,
         key_id: str,
@@ -294,16 +287,16 @@ class ApiKeyService:
     ) -> ApiKeyUsageStats | None:
         """
         Récupère les statistiques d'utilisation d'une clé.
-        
+
         Args:
             key_id: UUID de la clé.
             days: Période en jours.
-            
+
         Returns:
             ApiKeyUsageStats ou None si non trouvée.
         """
         return self._key_repo.get_usage_stats(key_id, days)
-    
+
     def validate_key(
         self,
         raw_key: str,
@@ -311,19 +304,19 @@ class ApiKeyService:
     ) -> dict[str, Any] | None:
         """
         Valide une clé API.
-        
+
         Args:
             raw_key: Clé API complète (sk-proj-xxx...).
             client_ip: IP du client pour logging.
-            
+
         Returns:
             Dict avec les infos de validation ou None si invalide.
         """
         validation = self._key_repo.validate(raw_key, client_ip)
-        
+
         if validation is None:
             return None
-        
+
         result = {
             "id": str(validation.id) if validation.id else None,
             "user_id": str(validation.user_id) if validation.user_id else None,
@@ -337,7 +330,7 @@ class ApiKeyService:
             "rag_enabled": validation.rag_enabled,
             "agent_name": validation.agent_name,
         }
-        
+
         return result
 
 

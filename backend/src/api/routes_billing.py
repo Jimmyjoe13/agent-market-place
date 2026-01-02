@@ -5,22 +5,24 @@ Billing Routes
 Endpoints pour la gestion des abonnements et paiements Stripe.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Header
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Request
+
 from src.api.routes_auth import get_current_user
 from src.models.user import UserWithSubscription
 from src.services.stripe_service import StripeService
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
+
 def get_stripe_service():
     return StripeService()
 
+
 @router.post("/checkout")
 async def create_checkout(
-    plan: str, # "monthly" or "yearly"
+    plan: str,  # "monthly" or "yearly"
     user: UserWithSubscription = Depends(get_current_user),
-    stripe_service: StripeService = Depends(get_stripe_service)
+    stripe_service: StripeService = Depends(get_stripe_service),
 ):
     """
     Crée une session Stripe Checkout.
@@ -31,10 +33,11 @@ async def create_checkout(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.post("/portal")
 async def create_portal(
     user: UserWithSubscription = Depends(get_current_user),
-    stripe_service: StripeService = Depends(get_stripe_service)
+    stripe_service: StripeService = Depends(get_stripe_service),
 ):
     """
     Crée une session pour le portail client Stripe.
@@ -45,24 +48,24 @@ async def create_portal(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @router.post("/webhook")
 async def stripe_webhook(
-    request: Request,
-    stripe_service: StripeService = Depends(get_stripe_service)
+    request: Request, stripe_service: StripeService = Depends(get_stripe_service)
 ):
     """
     Webhook Stripe pour recevoir les événements de paiement.
     """
     # Récupérer le header stripe-signature directement depuis la requête
     stripe_signature = request.headers.get("stripe-signature")
-    
+
     if not stripe_signature:
         raise HTTPException(status_code=400, detail="Missing stripe-signature header")
-        
+
     payload = await request.body()
     success = await stripe_service.handle_webhook(payload, stripe_signature)
-    
+
     if not success:
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
-        
+
     return {"status": "success"}

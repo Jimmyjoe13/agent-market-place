@@ -1,25 +1,25 @@
 """API module - FastAPI endpoints and authentication."""
 
+from src.api.auth import (
+    get_api_key,
+    require_any_scope,
+    require_api_key,
+    require_master_key,
+    require_scope,
+)
 from src.api.main import app, create_app
 from src.api.routes import router
 from src.api.routes_admin import admin_router
-from src.api.routes_keys import router as keys_router
 from src.api.routes_jobs import router as jobs_router
-from src.api.auth import (
-    get_api_key,
-    require_api_key,
-    require_scope,
-    require_any_scope,
-    require_master_key,
-)
+from src.api.routes_keys import router as keys_router
 from src.api.schemas import (
-    QueryRequest,
-    QueryResponse,
+    AnalyticsResponse,
     FeedbackRequest,
     FeedbackResponse,
-    IngestResponse,
-    AnalyticsResponse,
     HealthResponse,
+    IngestResponse,
+    QueryRequest,
+    QueryResponse,
 )
 
 __all__ = [
@@ -46,4 +46,3 @@ __all__ = [
     "AnalyticsResponse",
     "HealthResponse",
 ]
-

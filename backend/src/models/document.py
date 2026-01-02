@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class SourceType(str, Enum):
     """Types de sources de documents supportés."""
-    
+
     GITHUB = "github"
     PDF = "pdf"
     LINKEDIN = "linkedin"
@@ -27,7 +27,7 @@ class SourceType(str, Enum):
 class DocumentMetadata(BaseModel):
     """
     Métadonnées flexibles pour un document.
-    
+
     Attributes:
         title: Titre du document (optionnel).
         author: Auteur du document (optionnel).
@@ -37,7 +37,7 @@ class DocumentMetadata(BaseModel):
         tags: Tags pour catégorisation (optionnel).
         extra: Données additionnelles (optionnel).
     """
-    
+
     title: str | None = Field(default=None, description="Titre du document")
     author: str | None = Field(default=None, description="Auteur du document")
     url: str | None = Field(default=None, description="URL source")
@@ -45,21 +45,21 @@ class DocumentMetadata(BaseModel):
     language: str = Field(default="fr", description="Langue du contenu")
     tags: list[str] = Field(default_factory=list, description="Tags de catégorisation")
     extra: dict[str, Any] = Field(default_factory=dict, description="Données additionnelles")
-    
+
     model_config = {"extra": "allow"}
 
 
 class DocumentCreate(BaseModel):
     """
     Schéma pour la création d'un nouveau document.
-    
+
     Attributes:
         content: Contenu textuel du document.
         source_type: Type de source (github, pdf, etc.).
         source_id: Identifiant unique de la source.
         metadata: Métadonnées du document.
     """
-    
+
     content: str = Field(
         ...,
         description="Contenu textuel du document",
@@ -79,7 +79,7 @@ class DocumentCreate(BaseModel):
         default_factory=DocumentMetadata,
         description="Métadonnées du document",
     )
-    
+
     @field_validator("content")
     @classmethod
     def clean_content(cls, v: str) -> str:
@@ -90,9 +90,9 @@ class DocumentCreate(BaseModel):
 class Document(DocumentCreate):
     """
     Modèle complet d'un document avec embedding.
-    
+
     Étend DocumentCreate avec les champs générés par le système.
-    
+
     Attributes:
         id: Identifiant unique UUID du document.
         embedding: Vecteur d'embedding (optionnel lors de la lecture).
@@ -100,7 +100,7 @@ class Document(DocumentCreate):
         created_at: Date de création.
         updated_at: Date de dernière modification.
     """
-    
+
     id: UUID = Field(..., description="Identifiant unique du document")
     embedding: list[float] | None = Field(
         default=None,
@@ -119,13 +119,13 @@ class Document(DocumentCreate):
         default_factory=datetime.utcnow,
         description="Date de dernière modification",
     )
-    
+
     @field_validator("embedding", mode="before")
     @classmethod
     def parse_embedding(cls, v: Any) -> list[float] | None:
         """
         Parse l'embedding depuis une string JSON si nécessaire.
-        
+
         Supabase/pgvector retourne les vecteurs sous forme de string JSON.
         Ce validateur les convertit en vraies listes Python.
         """
@@ -141,14 +141,14 @@ class Document(DocumentCreate):
             except (json.JSONDecodeError, ValueError, TypeError):
                 pass
         return None
-    
+
     model_config = {"from_attributes": True}
 
 
 class DocumentMatch(BaseModel):
     """
     Résultat d'une recherche par similarité.
-    
+
     Attributes:
         id: Identifiant du document.
         content: Contenu du document.
@@ -158,7 +158,7 @@ class DocumentMatch(BaseModel):
         similarity: Score de similarité (0-1).
         created_at: Date de création.
     """
-    
+
     id: UUID = Field(..., description="Identifiant du document")
     content: str = Field(..., description="Contenu du document")
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -171,21 +171,21 @@ class DocumentMatch(BaseModel):
         le=1.0,
     )
     created_at: datetime = Field(..., description="Date de création")
-    
+
     model_config = {"from_attributes": True}
 
 
 class DocumentStats(BaseModel):
     """
     Statistiques sur les documents.
-    
+
     Attributes:
         total_documents: Nombre total de documents.
         documents_by_source: Répartition par type de source.
         avg_content_length: Longueur moyenne du contenu.
         last_updated: Date de dernière mise à jour.
     """
-    
+
     total_documents: int = Field(..., ge=0)
     documents_by_source: dict[str, int] = Field(default_factory=dict)
     avg_content_length: float = Field(..., ge=0)

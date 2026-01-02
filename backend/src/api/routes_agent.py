@@ -14,14 +14,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.deps import get_current_user, get_agent_repo, get_api_key_repo
+from src.api.deps import get_agent_repo, get_api_key_repo, get_current_user
 from src.config.logging_config import get_logger
 from src.models.agent import (
     AgentCreate,
-    AgentUpdate,
     AgentInfo,
-    AgentWithStats,
     AgentListResponse,
+    AgentUpdate,
+    AgentWithStats,
 )
 from src.models.user import UserWithSubscription
 from src.repositories.agent_repository import AgentRepository
@@ -33,6 +33,7 @@ router = APIRouter(prefix="/agents", tags=["Agents"])
 
 # ===== CRUD Agents =====
 
+
 @router.get("", response_model=AgentListResponse)
 async def list_agents(
     user: UserWithSubscription = Depends(get_current_user),
@@ -40,12 +41,12 @@ async def list_agents(
 ):
     """
     Liste tous les agents de l'utilisateur connecté.
-    
+
     Returns:
         Liste des agents avec leur configuration.
     """
     agents = repo.get_by_user(str(user.id), active_only=True)
-    
+
     return AgentListResponse(
         agents=agents,
         total=len(agents),
@@ -60,12 +61,12 @@ async def create_agent(
 ):
     """
     Crée un nouvel agent.
-    
+
     Vérifie que l'utilisateur n'a pas atteint sa limite d'agents.
-    
+
     Args:
         agent_data: Configuration de l'agent.
-        
+
     Returns:
         Agent créé.
     """
@@ -79,18 +80,18 @@ async def create_agent(
                 "message": f"Limite de {user.agents_limit} agents atteinte. Passez au plan supérieur.",
                 "current": current_count,
                 "limit": user.agents_limit,
-            }
+            },
         )
-    
+
     agent = repo.create_agent(str(user.id), agent_data)
-    
+
     logger.info(
         "Agent created",
         agent_id=str(agent.id),
         user_id=str(user.id),
         name=agent_data.name,
     )
-    
+
     return agent
 
 
@@ -102,28 +103,28 @@ async def get_agent(
 ):
     """
     Récupère un agent par son ID avec ses statistiques.
-    
+
     Args:
         agent_id: UUID de l'agent.
-        
+
     Returns:
         Agent avec statistiques d'utilisation.
     """
     agent = repo.get_with_stats(str(agent_id))
-    
+
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found",
         )
-    
+
     # Vérifier que l'agent appartient à l'utilisateur
     if agent.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this agent",
         )
-    
+
     return agent
 
 
@@ -136,39 +137,39 @@ async def update_agent(
 ):
     """
     Met à jour un agent.
-    
+
     Args:
         agent_id: UUID de l'agent.
         updates: Champs à mettre à jour.
-        
+
     Returns:
         Agent mis à jour.
     """
     # Vérifier que l'agent existe et appartient à l'utilisateur
     agent = repo.get_by_id(str(agent_id))
-    
+
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found",
         )
-    
+
     if agent.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this agent",
         )
-    
+
     updated = repo.update(str(agent_id), updates)
-    
+
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update agent",
         )
-    
+
     logger.info("Agent updated", agent_id=str(agent_id))
-    
+
     return updated
 
 
@@ -181,36 +182,36 @@ async def delete_agent(
 ):
     """
     Supprime un agent et toutes ses clés API.
-    
+
     ⚠️ Cette action est irréversible.
-    
+
     Args:
         agent_id: UUID de l'agent.
     """
     # Vérifier que l'agent existe et appartient à l'utilisateur
     agent = repo.get_by_id(str(agent_id))
-    
+
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found",
         )
-    
+
     if agent.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this agent",
         )
-    
+
     # Supprimer l'agent (les clés API seront supprimées par cascade)
     success = repo.delete(str(agent_id))
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete agent",
         )
-    
+
     logger.info("Agent deleted", agent_id=str(agent_id), user_id=str(user.id))
 
 
@@ -222,35 +223,36 @@ async def deactivate_agent(
 ):
     """
     Désactive un agent (soft delete).
-    
+
     L'agent et ses clés ne fonctionneront plus mais restent en base.
-    
+
     Args:
         agent_id: UUID de l'agent.
-        
+
     Returns:
         Agent désactivé.
     """
     agent = repo.get_by_id(str(agent_id))
-    
+
     if not agent:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found",
         )
-    
+
     if agent.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized",
         )
-    
+
     repo.deactivate(str(agent_id))
-    
+
     return repo.get_by_id(str(agent_id))
 
 
 # ===== Agent Keys =====
+
 
 @router.get("/{agent_id}/keys")
 async def list_agent_keys(
@@ -261,24 +263,24 @@ async def list_agent_keys(
 ):
     """
     Liste les clés API d'un agent.
-    
+
     Args:
         agent_id: UUID de l'agent.
-        
+
     Returns:
         Liste des clés API.
     """
     # Vérifier que l'agent appartient à l'utilisateur
     agent = agent_repo.get_by_id(str(agent_id))
-    
+
     if not agent or agent.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found",
         )
-    
+
     keys = api_key_repo.get_by_agent(str(agent_id))
-    
+
     return {
         "keys": keys,
         "total": len(keys),

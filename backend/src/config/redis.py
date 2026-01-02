@@ -5,27 +5,28 @@ Redis Configuration
 Gestion de la connexion Redis pour le rate limiting et le cache.
 """
 
-from typing import Optional
 import redis.asyncio as redis
-from src.config.settings import get_settings
+
 from src.config.logging_config import get_logger
+from src.config.settings import get_settings
 
 logger = get_logger(__name__)
 
 # Client Redis asynchrone (lazy loading)
-_redis_client: Optional[redis.Redis] = None
+_redis_client: redis.Redis | None = None
 
-async def get_redis_client() -> Optional[redis.Redis]:
+
+async def get_redis_client() -> redis.Redis | None:
     """
     Retourne l'instance du client Redis.
     Initialise la connexion si nécessaire.
     """
     global _redis_client
-    
+
     settings = get_settings()
     if not settings.redis_url:
         return None
-        
+
     if _redis_client is None:
         try:
             logger.info("Connecting to Redis", url=settings.redis_url)
@@ -41,8 +42,9 @@ async def get_redis_client() -> Optional[redis.Redis]:
         except Exception as e:
             logger.error("Failed to connect to Redis", error=str(e))
             _redis_client = None
-            
+
     return _redis_client
+
 
 async def close_redis():
     """Ferme la connexion Redis."""

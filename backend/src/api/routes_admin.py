@@ -18,14 +18,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from src.api.auth import require_scope, require_master_key
+from src.api.auth import require_master_key
 from src.config.logging_config import get_logger
 from src.models.api_key import (
     ApiKeyCreate,
     ApiKeyInfo,
     ApiKeyListResponse,
     ApiKeyResponse,
-    ApiKeyScope,
     ApiKeyUsageStats,
 )
 from src.repositories.api_key_repository import ApiKeyRepository
@@ -56,6 +55,7 @@ def get_repo() -> ApiKeyRepository:
 
 # ===== Endpoints =====
 
+
 @admin_router.post(
     "",
     response_model=ApiKeyResponse,
@@ -85,12 +85,12 @@ Assurez-vous de la sauvegarder immédiatement.
                         "prefix": "rag_a1b2c3d4",
                         "scopes": ["query", "feedback"],
                         "rate_limit_per_minute": 100,
-                        "created_at": "2024-01-15T10:30:00Z"
+                        "created_at": "2024-01-15T10:30:00Z",
                     }
                 }
-            }
+            },
         }
-    }
+    },
 )
 async def create_api_key(
     request: ApiKeyCreate,
@@ -98,27 +98,29 @@ async def create_api_key(
 ) -> ApiKeyResponse:
     """
     Crée une nouvelle clé API.
-    
+
     Nécessite la master key dans le header X-API-Key.
     """
     repo = get_repo()
-    
+
     try:
-        result = repo.create({
-            "name": request.name,
-            "scopes": [s.value for s in request.scopes],
-            "rate_limit_per_minute": request.rate_limit_per_minute,
-            "monthly_quota": request.monthly_quota,
-            "expires_in_days": request.expires_in_days,
-            "metadata": request.metadata,
-        })
-        
+        result = repo.create(
+            {
+                "name": request.name,
+                "scopes": [s.value for s in request.scopes],
+                "rate_limit_per_minute": request.rate_limit_per_minute,
+                "monthly_quota": request.monthly_quota,
+                "expires_in_days": request.expires_in_days,
+                "metadata": request.metadata,
+            }
+        )
+
         logger.info(
             "API key created",
             name=request.name,
             scopes=request.scopes,
         )
-        
+
         return ApiKeyResponse(
             id=result["id"],
             name=result["name"],
@@ -131,7 +133,7 @@ async def create_api_key(
             is_active=True,
             created_at=result["created_at"],
         )
-        
+
     except Exception as e:
         logger.error("Failed to create API key", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -151,17 +153,17 @@ async def list_api_keys(
 ) -> ApiKeyListResponse:
     """
     Liste toutes les clés API avec pagination.
-    
+
     Nécessite la master key ou le scope admin.
     """
     repo = get_repo()
-    
+
     keys, total = repo.list_keys(
         page=page,
         per_page=per_page,
         include_inactive=include_inactive,
     )
-    
+
     return ApiKeyListResponse(
         keys=keys,
         total=total,
@@ -185,15 +187,15 @@ async def get_api_key(
     Récupère les détails d'une clé API spécifique.
     """
     repo = get_repo()
-    
+
     key = repo.get_by_id(str(key_id))
-    
+
     if not key:
         raise HTTPException(
             status_code=404,
             detail={"error": "key_not_found", "message": "Clé API non trouvée."},
         )
-    
+
     return key
 
 
@@ -220,7 +222,7 @@ async def revoke_api_key(
     Révoque (désactive) une clé API.
     """
     repo = get_repo()
-    
+
     # Vérifier que la clé existe
     key = repo.get_by_id(str(key_id))
     if not key:
@@ -228,15 +230,15 @@ async def revoke_api_key(
             status_code=404,
             detail={"error": "key_not_found", "message": "Clé API non trouvée."},
         )
-    
+
     success = repo.revoke(str(key_id))
-    
+
     if not success:
         raise HTTPException(
             status_code=500,
             detail={"error": "revoke_failed", "message": "Échec de la révocation."},
         )
-    
+
     logger.info("API key revoked", key_id=str(key_id), name=key.name)
 
 
@@ -256,7 +258,7 @@ async def get_api_key_stats(
     Récupère les statistiques d'utilisation d'une clé.
     """
     repo = get_repo()
-    
+
     # Vérifier que la clé existe
     key = repo.get_by_id(str(key_id))
     if not key:
@@ -264,10 +266,10 @@ async def get_api_key_stats(
             status_code=404,
             detail={"error": "key_not_found", "message": "Clé API non trouvée."},
         )
-    
+
     stats = repo.get_usage_stats(str(key_id), days)
-    
+
     if stats is None:
         return ApiKeyUsageStats()
-    
+
     return stats

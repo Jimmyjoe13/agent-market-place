@@ -14,28 +14,26 @@ Scopes requis par endpoint:
 - `/training/*`: `admin`
 """
 
-from uuid import UUID
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-
-from src.api.auth import require_api_key, require_scope, require_any_scope
-from src.services.rate_limiter import get_rate_limiter
+from src.api.auth import require_any_scope, require_scope
 from src.api.schemas import (
-    QueryRequest,
-    QueryResponse,
-    SourceResponse,
+    AnalyticsResponse,
     FeedbackRequest,
     FeedbackResponse,
     IngestGithubRequest,
-    IngestTextRequest,
     IngestResponse,
-    AnalyticsResponse,
+    IngestTextRequest,
+    QueryRequest,
+    QueryResponse,
+    SourceResponse,
 )
 from src.config.logging_config import get_logger
 from src.models.api_key import ApiKeyValidation
 from src.models.document import DocumentCreate, DocumentMetadata, SourceType
 from src.providers import GithubProvider, PDFProvider
-from src.services import RAGEngine, FeedbackService, VectorizationService
+from src.services import FeedbackService, RAGEngine, VectorizationService
+from src.services.rate_limiter import get_rate_limiter
 
 logger = get_logger(__name__)
 
@@ -74,6 +72,7 @@ def get_vectorization() -> VectorizationService:
 
 # ===== Query Endpoints =====
 
+
 @router.post(
     "/query",
     response_model=QueryResponse,
@@ -108,7 +107,7 @@ async def query_rag(
 ) -> QueryResponse:
     """
     Interroge le système RAG avec routage intelligent.
-    
+
     Le routeur analyse automatiquement la requête pour déterminer :
     - S'il faut chercher dans les documents personnels (RAG)
     - S'il faut chercher sur le web (actualités)
@@ -127,29 +126,29 @@ async def query_rag(
                     detail={
                         "error": "REFLECTION_LIMIT_EXCEEDED",
                         "message": f"Limite de réflexion atteinte. Réessayez dans {retry_after}s.",
-                        "retry_after": retry_after
-                    }
+                        "retry_after": retry_after,
+                    },
                 )
 
         rag = get_rag_engine()
-        
+
         # Utiliser la session existante si fournie
         if request.session_id:
             rag._session_id = request.session_id
-        
+
         # Récupérer la config agent depuis ApiKeyValidation (champs directs)
         # Les champs sont: model_id, system_prompt, rag_enabled, agent_name
-        
+
         # Déterminer le system_prompt (priorité: request > agent_config > default)
         effective_system_prompt = request.system_prompt
         if not effective_system_prompt and api_key.system_prompt:
             effective_system_prompt = api_key.system_prompt
-        
+
         # Déterminer si RAG est activé (config agent peut le désactiver)
         use_rag = request.use_rag
         if api_key.rag_enabled is False:
             use_rag = False
-        
+
         response = await rag.query_async(
             question=request.question,
             system_prompt=effective_system_prompt,
@@ -160,7 +159,7 @@ async def query_rag(
             api_key_id=str(api_key.key_id) if api_key.key_id else None,  # Pour isolation documents
             model_id=api_key.model_id,  # Modèle LLM configuré sur l'agent
         )
-        
+
         # Convertir les sources
         sources = [
             SourceResponse(
@@ -171,7 +170,7 @@ async def query_rag(
             )
             for s in response.sources
         ]
-        
+
         # Préparer les infos de routage
         routing_info = None
         if response.routing:
@@ -183,14 +182,14 @@ async def query_rag(
                 "reasoning": response.routing.reasoning,
                 "latency_ms": response.routing.latency_ms,
             }
-        
+
         logger.info(
             "Query processed",
             key_id=str(api_key.key_id),
             question_length=len(request.question),
             routing_intent=response.routing.intent.value if response.routing else "unknown",
         )
-        
+
         return QueryResponse(
             answer=response.answer,
             sources=sources,
@@ -200,7 +199,7 @@ async def query_rag(
             thought_process=response.thought_process,
             routing=routing_info,
         )
-        
+
     except Exception as e:
         logger.error("Query failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -246,13 +245,14 @@ async def query_rag_stream(
 ):
     """
     Interroge le système RAG avec streaming SSE.
-    
+
     Émet des événements pour chaque étape du traitement,
     permettant un feedback visuel temps réel dans l'UI.
     """
-    from fastapi.responses import StreamingResponse
     import json
-    
+
+    from fastapi.responses import StreamingResponse
+
     async def generate_events():
         try:
             # 1. Rate limiting pour le mode réflexion (si activé)
@@ -262,19 +262,21 @@ async def query_rag_stream(
                     str(api_key.user_id) if api_key.user_id else str(api_key.key_id)
                 )
                 if not allowed:
-                    error_data = json.dumps({
-                        "error": "REFLECTION_LIMIT_EXCEEDED",
-                        "message": f"Limite de réflexion atteinte. Réessayez dans {retry_after}s.",
-                        "retry_after": retry_after
-                    })
+                    error_data = json.dumps(
+                        {
+                            "error": "REFLECTION_LIMIT_EXCEEDED",
+                            "message": f"Limite de réflexion atteinte. Réessayez dans {retry_after}s.",
+                            "retry_after": retry_after,
+                        }
+                    )
                     yield f"event: error\ndata: {error_data}\n\n"
                     return
 
             rag = get_rag_engine()
-            
+
             if request.session_id:
                 rag._session_id = request.session_id
-            
+
             async for event in rag.query_stream(
                 question=request.question,
                 system_prompt=request.system_prompt,
@@ -287,12 +289,12 @@ async def query_rag_stream(
                 event_type = event.get("event", "message")
                 data = json.dumps(event.get("data", {}))
                 yield f"event: {event_type}\ndata: {data}\n\n"
-                
+
         except Exception as e:
             logger.error("Streaming query failed", error=str(e))
             error_data = json.dumps({"error": str(e)})
             yield f"event: error\ndata: {error_data}\n\n"
-    
+
     return StreamingResponse(
         generate_events(),
         media_type="text/event-stream",
@@ -305,6 +307,7 @@ async def query_rag_stream(
 
 
 # ===== Feedback Endpoints =====
+
 
 @router.post(
     "/feedback",
@@ -329,23 +332,23 @@ async def submit_feedback(
     """
     try:
         feedback = get_feedback_service()
-        
+
         # Ajouter le feedback
         success = feedback.add_feedback(
             request.conversation_id,
             request.score,
             request.comment,
         )
-        
+
         # Flaguer si demandé
         if success and request.flag_for_training:
             feedback.flag_for_training(request.conversation_id)
-        
+
         return FeedbackResponse(
             success=success,
             message="Feedback enregistré" if success else "Échec de l'enregistrement",
         )
-        
+
     except Exception as e:
         logger.error("Feedback failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -374,6 +377,7 @@ async def get_analytics(
 
 # ===== Ingestion Endpoints =====
 
+
 @router.post(
     "/ingest/github",
     response_model=IngestResponse,
@@ -395,14 +399,14 @@ async def ingest_github(
     try:
         provider = GithubProvider()
         vectorization = get_vectorization()
-        
+
         stats = vectorization.ingest_from_provider(
             provider,
             request.repositories,
             skip_duplicates=request.skip_duplicates,
             user_id=str(api_key.user_id) if api_key.user_id else None,
         )
-        
+
         logger.info(
             "GitHub ingestion completed",
             key_id=str(api_key.key_id),
@@ -416,7 +420,7 @@ async def ingest_github(
             errors=stats.total_errors,
             message=f"{stats.total_created} documents créés",
         )
-        
+
     except Exception as e:
         logger.error("GitHub ingestion failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -436,7 +440,7 @@ async def ingest_text(
     """Ingère un texte manuellement."""
     try:
         vectorization = get_vectorization()
-        
+
         doc = DocumentCreate(
             content=request.content,
             source_type=SourceType.MANUAL,
@@ -446,12 +450,12 @@ async def ingest_text(
                 tags=request.tags,
             ),
         )
-        
+
         stats = vectorization.ingest_documents(
             [doc],
             user_id=str(api_key.user_id) if api_key.user_id else None,
         )
-        
+
         return IngestResponse(
             success=stats.total_created > 0,
             documents_created=stats.total_created,
@@ -459,7 +463,7 @@ async def ingest_text(
             errors=stats.total_errors,
             message="Document ingéré" if stats.total_created else "Document ignoré",
         )
-        
+
     except Exception as e:
         logger.error("Text ingestion failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -480,12 +484,12 @@ async def ingest_pdf(
     try:
         if not file.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Le fichier doit être un PDF")
-        
+
         provider = PDFProvider()
         content = await file.read()
-        
+
         documents = list(provider.extract_from_bytes(content, file.filename))
-        
+
         if not documents:
             return IngestResponse(
                 success=False,
@@ -494,14 +498,14 @@ async def ingest_pdf(
                 errors=0,
                 message="Aucun contenu extrait du PDF",
             )
-        
+
         vectorization = get_vectorization()
         doc_creates = [provider.to_document(d) for d in documents]
         stats = vectorization.ingest_documents(
             doc_creates,
             user_id=str(api_key.user_id) if api_key.user_id else None,
         )
-        
+
         return IngestResponse(
             success=stats.total_created > 0,
             documents_created=stats.total_created,
@@ -509,7 +513,7 @@ async def ingest_pdf(
             errors=stats.total_errors,
             message=f"PDF traité: {stats.total_created} documents créés",
         )
-        
+
     except Exception as e:
         logger.error("PDF ingestion failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))

@@ -16,10 +16,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """
     Configuration principale de l'application.
-    
+
     Toutes les variables sont chargées depuis le fichier .env.
     Utilise le pattern Singleton via lru_cache.
-    
+
     Attributes:
         mistral_api_key: Clé API Mistral AI pour embeddings et LLM.
         supabase_url: URL du projet Supabase.
@@ -28,14 +28,14 @@ class Settings(BaseSettings):
         perplexity_api_key: Clé API Perplexity pour recherche web.
         github_access_token: Token d'accès GitHub pour l'API.
     """
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
-    
+
     # ===== API Keys =====
     mistral_api_key: str = Field(
         ...,
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
         default="",
         description="Token d'accès GitHub (optionnel)",
     )
-    
+
     # ===== Alternative LLM Providers =====
     openai_api_key: str = Field(
         default="",
@@ -80,7 +80,7 @@ class Settings(BaseSettings):
         default="mistral",
         description="Provider LLM par défaut (mistral, openai, gemini)",
     )
-    
+
     # ===== OAuth Settings =====
     google_client_id: str = Field(
         default="",
@@ -98,7 +98,7 @@ class Settings(BaseSettings):
         default="",
         description="Secret JWT Supabase pour validation des tokens",
     )
-    
+
     # ===== Stripe Settings (Monetization) =====
     stripe_secret_key: str = Field(
         default="",
@@ -120,13 +120,13 @@ class Settings(BaseSettings):
         default="price_1Sk2EqLKvNPDgJAhxuheJZFc",
         description="Price ID du Plan Pro Annuel",
     )
-    
+
     # ===== Redis Settings (Rate Limiting) =====
     redis_url: str = Field(
         default="",
         description="URL Redis pour le rate limiting (ex: redis://localhost:6379)",
     )
-    
+
     # ===== Application Settings =====
     app_env: Literal["development", "staging", "production"] = Field(
         default="development",
@@ -140,7 +140,7 @@ class Settings(BaseSettings):
         default="INFO",
         description="Niveau de logging",
     )
-    
+
     # ===== Vector Store Settings =====
     embedding_model: str = Field(
         default="mistral-embed",
@@ -164,7 +164,7 @@ class Settings(BaseSettings):
         ge=1,
         le=100,
     )
-    
+
     # ===== LLM Settings =====
     llm_model: str = Field(
         default="mistral-large-latest",
@@ -182,7 +182,7 @@ class Settings(BaseSettings):
         ge=1,
         le=32768,
     )
-    
+
     # ===== API Settings =====
     api_host: str = Field(
         default="0.0.0.0",
@@ -198,7 +198,7 @@ class Settings(BaseSettings):
         default=True,
         description="Auto-reload en développement",
     )
-    
+
     # ===== API Authentication =====
     api_key_required: bool = Field(
         default=True,
@@ -218,29 +218,28 @@ class Settings(BaseSettings):
         ge=0,
         le=10000,
     )
-    
+
     # ===== CORS Settings =====
     cors_origins: str = Field(
         default="http://localhost:3000,https://rag-agentia.netlify.app",
         description="Origines CORS autorisées (séparées par des virgules)",
     )
-    
+
     @field_validator("supabase_url")
     @classmethod
     def validate_supabase_url(cls, v: str) -> str:
         """Valide que l'URL Supabase est correcte."""
         if not v.startswith("https://") or "supabase" not in v:
             raise ValueError(
-                "supabase_url doit être une URL Supabase valide "
-                "(ex: https://xxx.supabase.co)"
+                "supabase_url doit être une URL Supabase valide (ex: https://xxx.supabase.co)"
             )
         return v.rstrip("/")
-    
+
     @property
     def is_development(self) -> bool:
         """Vérifie si on est en environnement de développement."""
         return self.app_env == "development"
-    
+
     @property
     def is_production(self) -> bool:
         """Vérifie si on est en environnement de production."""
@@ -251,16 +250,16 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """
     Retourne l'instance singleton des settings.
-    
+
     Utilise lru_cache pour garantir qu'une seule instance
     est créée durant le cycle de vie de l'application.
-    
+
     Returns:
         Settings: Instance configurée des paramètres.
-        
+
     Raises:
         ValidationError: Si des variables d'environnement requises sont manquantes.
-        
+
     Example:
         >>> settings = get_settings()
         >>> print(settings.llm_model)
