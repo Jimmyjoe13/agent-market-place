@@ -44,7 +44,21 @@ export function useAgents(activeAgentId?: string) {
   
   // Créer un agent
   const createMutation = useMutation({
-    mutationFn: (newAgent: AgentCreate) => api.createAgent(newAgent),
+    mutationFn: async (newAgent: AgentCreate) => {
+      const agent = await api.createAgent(newAgent);
+      // Créer automatiquement une clé API pour le nouvel agent
+      try {
+        await api.createUserApiKey({
+          name: `Key for ${agent.name}`,
+          scopes: ["query"],
+          agent_id: agent.id
+        });
+      } catch (e) {
+        console.error("Erreur création clé auto", e);
+        // On ne bloque pas si la création de clé échoue
+      }
+      return agent;
+    },
     onSuccess: (createdAgent) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agents });
       toast.success('Agent créé avec succès');
@@ -88,7 +102,8 @@ export function useAgents(activeAgentId?: string) {
     enabled: !!activeAgentId,
   });
 
-  const activeKey = keysResponse?.keys.find((k: any) => k.is_active);
+  // Prendre la clé active, ou la première disponible (fallback), ou undefined
+  const activeKey = keysResponse?.keys?.find?.((k: any) => k.is_active) || keysResponse?.keys?.[0];
 
   return {
     // Data

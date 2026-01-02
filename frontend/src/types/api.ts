@@ -143,6 +143,7 @@ export interface ApiKeyCreate {
   monthly_quota?: number;
   expires_in_days?: number;
   metadata?: Record<string, unknown>;
+  agent_id?: string;
 }
 
 export interface ApiKeyResponse {
