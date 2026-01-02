@@ -103,6 +103,35 @@ export function getProgressColor(percent: number): string {
   return "bg-green-500";
 }
 
+/**
+ * Calcule la prévision d'utilisation à la fin du mois.
+ * Formule: (usage / jours_passés) * jours_totaux
+ */
+export function calculateUsageForecast(used: number, limit: number): { 
+  forecastValue: number; 
+  willExceed: boolean;
+  daysRemaining: number;
+} {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const currentDay = now.getDate();
+  const daysPassed = Math.max(currentDay, 1);
+  const daysRemaining = daysInMonth - currentDay;
+  
+  if (limit <= 0 || limit === -1) {
+    return { forecastValue: 0, willExceed: false, daysRemaining };
+  }
+  
+  const dailyAverage = used / daysPassed;
+  const forecastValue = Math.round(dailyAverage * daysInMonth);
+  const willExceed = forecastValue > limit;
+  
+  return { forecastValue, willExceed, daysRemaining };
+}
+
 // ===== Hook =====
 
 interface UseRealtimeUsageOptions {
