@@ -6,6 +6,7 @@ Endpoints pour la gestion des jobs d'ingestion de documents:
 - Création de jobs d'ingestion
 - Suivi de progression
 - Historique des jobs
+- Jobs async via Redis Queue
 """
 
 from datetime import datetime
@@ -360,3 +361,176 @@ async def cancel_job(
     except Exception as e:
         logger.error("Cancel job failed", error=str(e))
         raise HTTPException(status_code=500, detail="Erreur serveur")
+
+
+# ============================================
+# Redis Queue Jobs (Async Processing)
+# ============================================
+
+
+class GitHubIngestRequest(BaseModel):
+    """Requête d'ingestion GitHub via queue."""
+
+    repo_url: str = Field(
+        ...,
+        description="URL du repository GitHub (ex: https://github.com/user/repo)",
+        examples=["https://github.com/fastapi/fastapi"],
+    )
+    branch: str = Field(
+        default="main",
+        description="Branche à ingérer",
+    )
+
+
+class AsyncJobResponse(BaseModel):
+    """Réponse pour un job async RQ."""
+
+    job_id: str
+    status: str
+    message: str
+    queue: str
+
+
+class AsyncJobStatusResponse(BaseModel):
+    """Statut d'un job RQ."""
+
+    job_id: str
+    status: str
+    progress: int
+    message: str
+    result: dict | None = None
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+class QueueStatsResponse(BaseModel):
+    """Statistiques de la queue."""
+
+    available: bool
+    queue_name: str | None = None
+    pending_jobs: int | None = None
+    failed_jobs: int | None = None
+    finished_jobs: int | None = None
+    error: str | None = None
+
+
+@router.post("/async/github", response_model=AsyncJobResponse)
+async def create_async_github_job(
+    request: GitHubIngestRequest,
+    api_key: ApiKeyValidation = Depends(require_scope("ingest")),
+):
+    """
+    Crée un job d'ingestion GitHub asynchrone via Redis Queue.
+
+    Le repository sera traité en arrière-plan par un worker.
+    Utilisez GET /jobs/async/{job_id} pour suivre la progression.
+
+    Avantages par rapport à /jobs/ingest:
+    - Pas de timeout même pour les gros repos
+    - Progression en temps réel
+    - Reprise en cas d'échec
+    """
+    try:
+        from src.services.queue_service import get_queue_service
+
+        queue_service = get_queue_service()
+
+        if not queue_service.is_available:
+            raise HTTPException(
+                status_code=503,
+                detail="Queue service unavailable. Redis not configured.",
+            )
+
+        result = queue_service.enqueue_github_ingestion(
+            user_id=str(api_key.user_id),
+            repo_url=request.repo_url,
+            api_key_id=str(api_key.api_key_id),
+            branch=request.branch,
+        )
+
+        logger.info(
+            "Async GitHub job queued",
+            job_id=result.job_id,
+            repo_url=request.repo_url,
+        )
+
+        return AsyncJobResponse(
+            job_id=result.job_id,
+            status="queued",
+            message=f"Job d'ingestion créé. Poll GET /jobs/async/{result.job_id} pour suivre.",
+            queue=result.queue,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Create async GitHub job failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/async/{job_id}", response_model=AsyncJobStatusResponse)
+async def get_async_job_status(
+    job_id: str,
+    api_key: ApiKeyValidation = Depends(require_scope("query")),
+):
+    """
+    Récupère le statut d'un job RQ asynchrone.
+
+    Utilisez cette endpoint pour le polling de progression.
+    Recommandé: poll toutes les 2-3 secondes.
+    """
+    try:
+        from src.services.queue_service import get_queue_service
+
+        queue_service = get_queue_service()
+
+        if not queue_service.is_available:
+            raise HTTPException(
+                status_code=503,
+                detail="Queue service unavailable.",
+            )
+
+        status = queue_service.get_job_status(job_id)
+
+        if status is None:
+            raise HTTPException(status_code=404, detail="Job non trouvé")
+
+        return AsyncJobStatusResponse(
+            job_id=job_id,
+            status=status.status.value,
+            progress=status.progress,
+            message=status.message,
+            result=status.result if isinstance(status.result, dict) else None,
+            error=status.error,
+            started_at=status.started_at,
+            completed_at=status.completed_at,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Get async job status failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/queue/stats", response_model=QueueStatsResponse)
+async def get_queue_stats(
+    api_key: ApiKeyValidation = Depends(require_scope("query")),
+):
+    """
+    Récupère les statistiques de la queue d'ingestion.
+
+    Utile pour le monitoring et debug.
+    """
+    try:
+        from src.services.queue_service import get_queue_service
+
+        queue_service = get_queue_service()
+        stats = queue_service.get_queue_stats()
+
+        return QueueStatsResponse(**stats)
+
+    except Exception as e:
+        logger.error("Get queue stats failed", error=str(e))
+        return QueueStatsResponse(available=False, error=str(e))
