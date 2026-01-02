@@ -34,6 +34,7 @@ from src.models.document import DocumentCreate, DocumentMetadata, SourceType
 from src.providers import GithubProvider, PDFProvider
 from src.services import FeedbackService, RAGEngine, VectorizationService
 from src.services.rate_limiter import get_rate_limiter
+from src.repositories.subscription_repository import SubscriptionRepository
 
 logger = get_logger(__name__)
 
@@ -44,6 +45,15 @@ router = APIRouter()
 _rag_engine: RAGEngine | None = None
 _feedback_service: FeedbackService | None = None
 _vectorization: VectorizationService | None = None
+_subscription_repo: SubscriptionRepository | None = None
+
+
+def get_subscription_repo() -> SubscriptionRepository:
+    """Retourne l'instance du Subscription Repository."""
+    global _subscription_repo
+    if _subscription_repo is None:
+        _subscription_repo = SubscriptionRepository()
+    return _subscription_repo
 
 
 def get_rag_engine() -> RAGEngine:
@@ -114,6 +124,27 @@ async def query_rag(
     - Si une réflexion approfondie est nécessaire
     """
     try:
+        # 0. Vérifier les limites d'usage du plan (freemium/pro/enterprise)
+        if api_key.user_id:
+            sub_repo = get_subscription_repo()
+            limits = sub_repo.check_user_limits(str(api_key.user_id), "request")
+            
+            if not limits.get("allowed", True):
+                reason = limits.get("reason", "quota_exceeded")
+                logger.warning(
+                    "Request blocked by quota",
+                    user_id=str(api_key.user_id),
+                    reason=reason,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail={
+                        "error": "QUOTA_EXCEEDED",
+                        "message": "Limite de requêtes atteinte. Passez à un plan supérieur.",
+                        "reason": reason,
+                    },
+                )
+        
         # 1. Rate limiting pour le mode réflexion (si activé)
         if request.enable_reflection:
             limiter = get_rate_limiter()
@@ -183,6 +214,25 @@ async def query_rag(
                 "latency_ms": response.routing.latency_ms,
             }
 
+        # Incrémenter l'usage après requête réussie
+        if api_key.user_id:
+            try:
+                sub_repo = get_subscription_repo()
+                tokens_used = response.metadata.get("tokens_used", 0) if response.metadata else 0
+                sub_repo.increment_usage(
+                    user_id=str(api_key.user_id),
+                    usage_type="requests",
+                    amount=1,
+                )
+                logger.debug(
+                    "Usage incremented",
+                    user_id=str(api_key.user_id),
+                    tokens=tokens_used,
+                )
+            except Exception as usage_error:
+                # Ne pas faire échouer la requête si l'incrémentation échoue
+                logger.error("Failed to increment usage", error=str(usage_error))
+        
         logger.info(
             "Query processed",
             key_id=str(api_key.key_id),
@@ -255,6 +305,23 @@ async def query_rag_stream(
 
     async def generate_events():
         try:
+            # 0. Vérifier les limites d'usage du plan
+            if api_key.user_id:
+                sub_repo = get_subscription_repo()
+                limits = sub_repo.check_user_limits(str(api_key.user_id), "request")
+                
+                if not limits.get("allowed", True):
+                    reason = limits.get("reason", "quota_exceeded")
+                    error_data = json.dumps(
+                        {
+                            "error": "QUOTA_EXCEEDED",
+                            "message": "Limite de requêtes atteinte. Passez à un plan supérieur.",
+                            "reason": reason,
+                        }
+                    )
+                    yield f"event: error\ndata: {error_data}\n\n"
+                    return
+            
             # 1. Rate limiting pour le mode réflexion (si activé)
             if request.enable_reflection:
                 limiter = get_rate_limiter()
@@ -289,6 +356,18 @@ async def query_rag_stream(
                 event_type = event.get("event", "message")
                 data = json.dumps(event.get("data", {}))
                 yield f"event: {event_type}\ndata: {data}\n\n"
+                
+                # Incrémenter l'usage quand le stream est complet
+                if event_type == "complete" and api_key.user_id:
+                    try:
+                        sub_repo = get_subscription_repo()
+                        sub_repo.increment_usage(
+                            user_id=str(api_key.user_id),
+                            usage_type="requests",
+                            amount=1,
+                        )
+                    except Exception as usage_error:
+                        logger.error("Failed to increment usage", error=str(usage_error))
 
         except Exception as e:
             logger.error("Streaming query failed", error=str(e))

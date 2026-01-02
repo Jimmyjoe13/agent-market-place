@@ -14,4 +14,6 @@ export { UsageDashboard } from "./UsageDashboard";
 export { AgentLogs } from "./AgentLogs";
 export { LiveIndicator } from "./LiveIndicator";
 export { AnimatedCounter, FlashCounter } from "./AnimatedCounter";
+export { PeriodSelector, type Period } from "./PeriodSelector";
+
 
