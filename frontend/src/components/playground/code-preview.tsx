@@ -68,7 +68,7 @@ export function CodePreview({ parameters, requestContent, agentId, apiKey }: Cod
   const keyPlaceholder = apiKey ? `${apiKey.slice(0, 12)}...` : "YOUR_API_KEY";
 
   const generateCurl = () => {
-    return `curl -X POST https://api.rag-agent.ia/v1/query \\
+    return `curl -X POST https://agent-ia-augment.onrender.com/api/v1/query \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: ${keyPlaceholder}" \\
   -d '{
@@ -86,7 +86,7 @@ export function CodePreview({ parameters, requestContent, agentId, apiKey }: Cod
     return `import requests
 import json
 
-url = "https://api.rag-agent.ia/v1/query"
+url = "https://agent-ia-augment.onrender.com/api/v1/query"
 headers = {
     "X-API-Key": "${keyPlaceholder}",
     "Content-Type": "application/json"
@@ -105,7 +105,7 @@ print(json.dumps(response.json(), indent=2))`;
   };
 
   const generateJS = () => {
-    return `const response = await fetch("https://api.rag-agent.ia/v1/query", {
+    return `const response = await fetch("https://agent-ia-augment.onrender.com/api/v1/query", {
   method: "POST",
   headers: {
     "X-API-Key": "${keyPlaceholder}",
