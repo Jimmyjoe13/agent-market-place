@@ -257,3 +257,43 @@ export interface Subscription {
   plan: Plan;
 }
 
+// ===== Agent Types =====
+
+export interface AgentInfo {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  model_id: string;
+  system_prompt: string | null;
+  temperature: number;
+  rag_enabled: boolean;
+  max_monthly_tokens: number;
+  max_daily_requests: number;
+  tokens_used_this_month: number;
+  requests_today: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+  api_keys_count?: number;
+  documents_count?: number;
+}
+
+export interface AgentCreate {
+  name: string;
+  description?: string;
+  model_id?: string;
+  system_prompt?: string;
+  temperature?: number;
+  rag_enabled?: boolean;
+}
+
+export interface AgentUpdate {
+  name?: string;
+  description?: string;
+  model_id?: string;
+  system_prompt?: string;
+  temperature?: number;
+  rag_enabled?: boolean;
+  is_active?: boolean;
+}

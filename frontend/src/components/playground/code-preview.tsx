@@ -31,9 +31,11 @@ import { cn } from "@/lib/utils";
 interface CodePreviewProps {
   parameters: any;
   requestContent: string;
+  agentId?: string | null;
+  apiKey?: string;
 }
 
-export function CodePreview({ parameters, requestContent }: CodePreviewProps) {
+export function CodePreview({ parameters, requestContent, agentId, apiKey }: CodePreviewProps) {
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -42,7 +44,7 @@ export function CodePreview({ parameters, requestContent }: CodePreviewProps) {
       <div className="bg-zinc-950 border-t border-white/5 p-4 flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs font-medium text-zinc-400">
           <Code2 className="h-4 w-4 text-emerald-400" />
-          Request Preview
+          Request Preview {agentId && <span className="text-zinc-600">| {agentId.slice(0, 8)}...</span>}
         </div>
         <Button 
           variant="ghost" 
@@ -63,51 +65,64 @@ export function CodePreview({ parameters, requestContent }: CodePreviewProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const keyPlaceholder = apiKey ? `${apiKey.slice(0, 12)}...` : "YOUR_API_KEY";
+
   const generateCurl = () => {
     return `curl -X POST https://api.rag-agent.ia/v1/query \\
   -H "Content-Type: application/json" \\
-  -H "X-API-Key: YOUR_API_KEY" \\
+  -H "X-API-Key: ${keyPlaceholder}" \\
   -d '{
     "question": "${requestContent.replace(/"/g, '\\"') || "Saisissez votre question..."}",
-    "system_prompt": "${parameters.systemPrompt.replace(/"/g, '\\"') || ""}",
+    "session_id": "optional-session-id",
+    "model": "${parameters.model}",
+    "system_prompt": "${parameters.systemPrompt?.replace(/"/g, '\\"') || ""}",
+    "temperature": ${parameters.temperature},
+    "use_rag": ${parameters.rag_enabled !== false ? "true" : "false"},
     "use_web_search": ${parameters.useWebSearch ? "true" : "false"}
   }'`;
   };
 
   const generatePython = () => {
     return `import requests
+import json
 
 url = "https://api.rag-agent.ia/v1/query"
 headers = {
-    "X-API-Key": "YOUR_API_KEY",
+    "X-API-Key": "${keyPlaceholder}",
     "Content-Type": "application/json"
 }
 payload = {
-    "question": "${requestContent || "..."}",
-    "system_prompt": "${parameters.systemPrompt || ""}",
+    "question": "${requestContent || "Saisissez votre question..."}",
+    "model": "${parameters.model}",
+    "system_prompt": "${parameters.systemPrompt?.replace(/"/g, '\\"') || ""}",
+    "temperature": ${parameters.temperature},
+    "use_rag": ${parameters.rag_enabled !== false ? "True" : "False"},
     "use_web_search": ${parameters.useWebSearch ? "True" : "False"}
 }
 
 response = requests.post(url, json=payload, headers=headers)
-print(response.json()["answer"])`;
+print(json.dumps(response.json(), indent=2))`;
   };
 
   const generateJS = () => {
     return `const response = await fetch("https://api.rag-agent.ia/v1/query", {
   method: "POST",
   headers: {
-    "X-API-Key": "YOUR_API_KEY",
+    "X-API-Key": "${keyPlaceholder}",
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
-    question: "${requestContent || "..."}",
-    system_prompt: "${parameters.systemPrompt || ""}",
+    question: "${requestContent || "Saisissez votre question..."}",
+    model: "${parameters.model}",
+    system_prompt: "${parameters.systemPrompt?.replace(/"/g, '\\"') || ""}",
+    temperature: ${parameters.temperature},
+    use_rag: ${parameters.rag_enabled !== false ? "true" : "false"},
     use_web_search: ${parameters.useWebSearch ? "true" : "false"}
   })
 });
 
 const data = await response.json();
-console.log(data.answer);`;
+console.log(data);`;
   };
 
   return (

@@ -17,6 +17,9 @@ import type {
   ApiKeyResponse,
   ApiKeyInfo,
   AnalyticsResponse,
+  AgentInfo,
+  AgentCreate,
+  AgentUpdate
 } from "@/types/api";
 
 // ===== Configuration =====
@@ -233,8 +236,38 @@ class ApiClient {
     return data;
   }
 
-  // ===== Agent Config Endpoints =====
+  // ===== Agent Management (Multi-Agent) =====
 
+  async getAgents(): Promise<{ agents: AgentInfo[]; total: number }> {
+    const { data } = await this.client.get("/agents");
+    return data;
+  }
+
+  async createAgent(agent: AgentCreate): Promise<AgentInfo> {
+    const { data } = await this.client.post("/agents", agent);
+    return data;
+  }
+
+  async getAgent(agentId: string): Promise<AgentInfo> {
+    const { data } = await this.client.get(`/agents/${agentId}`);
+    return data;
+  }
+
+  async updateAgent(agentId: string, updates: AgentUpdate): Promise<AgentInfo> {
+    const { data } = await this.client.patch(`/agents/${agentId}`, updates);
+    return data;
+  }
+
+  async deleteAgent(agentId: string): Promise<void> {
+    await this.client.delete(`/agents/${agentId}`);
+  }
+
+  async getAgentKeys(agentId: string): Promise<{ keys: any[]; total: number }> {
+    const { data } = await this.client.get(`/agents/${agentId}/keys`);
+    return data;
+  }
+
+  // Legacy (deprecated but kept for compatibility during migration)
   async getAgentConfig(): Promise<{
     agent_id: string;
     config: {
@@ -248,6 +281,7 @@ class ApiClient {
     return data;
   }
 
+  // Legacy (deprecated)
   async updateAgentConfig(config: {
     model_id?: string;
     system_prompt?: string;

@@ -38,6 +38,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
 import { usePanelState } from "@/hooks/usePanelState";
+import { useAgents } from "@/hooks/useAgents";
 import { CodePreview } from "@/components/playground/code-preview";
 import AgentConfigPanel from "@/components/playground/AgentConfigPanel";
 import type { Message } from "@/types/api";
@@ -55,9 +56,35 @@ const DEFAULT_PARAMS = {
 export default function PlaygroundPage() {
   const [input, setInput] = useState("");
   const [parameters, setParameters] = useState(DEFAULT_PARAMS);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Hook Agents (Multi-Agent Management)
+  const { agents, activeKey, createAgent } = useAgents(selectedAgentId || undefined);
+
+  // Auto-select first agent if none selected
+  useEffect(() => {
+    if (agents.length > 0 && !selectedAgentId) {
+        // Try to recover from localStorage if needed, or first agent
+        const savedId = localStorage.getItem('playground_agent_id');
+        const found = savedId ? agents.find(a => a.id === savedId) : null;
+        if (found) {
+            setSelectedAgentId(found.id);
+        } else {
+            setSelectedAgentId(agents[0].id);
+        }
+    }
+  }, [agents, selectedAgentId]);
+
+  // Persist selection
+  useEffect(() => {
+    if (selectedAgentId) {
+        localStorage.setItem('playground_agent_id', selectedAgentId);
+    }
+  }, [selectedAgentId]);
+
 
   // Panel state management with persistence
   const {
@@ -103,7 +130,8 @@ export default function PlaygroundPage() {
         prev.model === newParams.model_id &&
         prev.systemPrompt === newParams.system_prompt &&
         prev.temperature === newParams.temperature &&
-        prev.maxTokens === newParams.max_tokens
+        prev.maxTokens === newParams.max_tokens &&
+        (prev as any).agentId === newParams.agent_id
       ) {
         return prev;
       }
@@ -113,6 +141,8 @@ export default function PlaygroundPage() {
         systemPrompt: newParams.system_prompt,
         temperature: newParams.temperature,
         maxTokens: newParams.max_tokens,
+        agentId: newParams.agent_id,
+        agentName: newParams.name,
       };
     });
   }, []);
@@ -317,6 +347,8 @@ export default function PlaygroundPage() {
         <CodePreview 
           parameters={parameters}
           requestContent={input}
+          agentId={selectedAgentId}
+          apiKey={activeKey?.key}
         />
       </div>
 
@@ -346,6 +378,17 @@ export default function PlaygroundPage() {
               </div>
               <AgentConfigPanel 
                 onConfigChange={handleConfigChange}
+                selectedAgentId={selectedAgentId}
+                onAgentSelect={setSelectedAgentId}
+                onCreateAgent={async (data) => {
+                    const newAgent = await createAgent({
+                        ...data,
+                        model_id: 'mistral-large-latest',
+                        rag_enabled: true,
+                        temperature: 0.7
+                    });
+                    setSelectedAgentId(newAgent.id);
+                }}
               />
             </div>
           </div>

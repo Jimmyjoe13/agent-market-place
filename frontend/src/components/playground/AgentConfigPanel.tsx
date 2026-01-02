@@ -1,13 +1,15 @@
 /**
- * Panneau de configuration de l'agent
- * Permet de modifier le modèle LLM, le prompt système et les options RAG
+ * Panneau de configuration de l'agent (Multi-Agent Version)
+ * Permet de sélectionner, créer et configurer les agents.
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useAgentConfigManager } from '@/hooks/useAgentConfig';
+import { useAgents } from '@/hooks/useAgents';
+import { useAvailableModels } from '@/hooks/useAgentConfig';
+import { CreateAgentDialog } from './CreateAgentDialog';
 import { 
   Card, 
   CardContent, 
@@ -24,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -39,7 +42,9 @@ import {
   Flame,
   Maximize2,
   ChevronDown,
-  Info
+  Info,
+  Plus,
+  Bot
 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Separator } from '@/components/ui/separator';
@@ -54,21 +59,49 @@ import { cn } from '@/lib/utils';
 interface AgentConfigPanelProps {
   className?: string;
   onConfigChange?: (config: any) => void;
+  selectedAgentId?: string | null;
+  onAgentSelect?: (id: string) => void;
+  onCreateAgent?: (data: { name: string; description?: string }) => Promise<void>;
 }
 
 export default function AgentConfigPanel({ 
   className = '',
-  onConfigChange 
+  onConfigChange,
+  selectedAgentId,
+  onAgentSelect,
+  onCreateAgent
 }: AgentConfigPanelProps) {
+  // Hooks
   const { 
-    config, 
-    models, 
-    isLoading, 
-    isUpdating, 
-    updateConfig 
-  } = useAgentConfigManager();
+    agents, 
+    selectedAgent, 
+    // activeKey, // Pas besoin ici
+    createAgent, // Fallback si onCreateAgent n'est pas fourni (optionnel)
+    updateAgent,
+    isLoading: isLoadingAgents, 
+    isUpdating,
+    isCreating
+  } = useAgents(selectedAgentId || undefined);
+  
+  const { data: models = [], isLoading: isLoadingModels } = useAvailableModels();
   const { user } = useAuth();
+  
   const [mounted, setMounted] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // État local pour le formulaire
+  const [localConfig, setLocalConfig] = useState({
+    name: '',
+    description: '',
+    model_id: 'mistral-large-latest',
+    system_prompt: '',
+    rag_enabled: true,
+    temperature: 0.7,
+    max_tokens: 2048,
+    top_p: 1.0,
+  });
+  
+  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -77,82 +110,78 @@ export default function AgentConfigPanel({
   const userPlan = user?.user_metadata?.plan || 'free';
   const isPremium = userPlan !== 'free';
 
-  // État local pour les modifications non sauvegardées
-  const [localConfig, setLocalConfig] = useState({
-    model_id: 'mistral-large-latest',
-    system_prompt: '',
-    rag_enabled: true,
-    agent_name: '',
-    temperature: 0.7,
-    max_tokens: 2048,
-    top_p: 1.0,
-  });
-  const [hasChanges, setHasChanges] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Synchroniser avec la config serveur
+  // Synchroniser l'état local quand l'agent sélectionné change
   useEffect(() => {
-    if (config) {
+    if (selectedAgent) {
       setLocalConfig({
-        model_id: config.model_id,
-        system_prompt: config.system_prompt || '',
-        rag_enabled: config.rag_enabled,
-        agent_name: config.agent_name || '',
-        temperature: (config as any).temperature ?? 0.7,
-        max_tokens: (config as any).max_tokens ?? 2048,
-        top_p: (config as any).top_p ?? 1.0,
+        name: selectedAgent.name,
+        description: selectedAgent.description || '',
+        model_id: selectedAgent.model_id,
+        system_prompt: selectedAgent.system_prompt || '',
+        rag_enabled: selectedAgent.rag_enabled,
+        temperature: selectedAgent.temperature ?? 0.7,
+        max_tokens: selectedAgent.max_monthly_tokens > 0 ? 0 : 2048,
+        top_p: 1.0,
       });
       setHasChanges(false);
     }
-  }, [config]);
+  }, [selectedAgent]);
 
-  // Détecter les changements
+  // Détecter les changements et notifier le parent
   useEffect(() => {
-    if (config) {
+    if (selectedAgent) {
       const changed = 
-        localConfig.model_id !== config.model_id ||
-        localConfig.system_prompt !== (config.system_prompt || '') ||
-        localConfig.rag_enabled !== config.rag_enabled ||
-        localConfig.agent_name !== (config.agent_name || '') ||
-        localConfig.temperature !== ((config as any).temperature ?? 0.7) ||
-        localConfig.max_tokens !== ((config as any).max_tokens ?? 2048) ||
-        localConfig.top_p !== ((config as any).top_p ?? 1.0);
+        localConfig.name !== selectedAgent.name ||
+        localConfig.description !== (selectedAgent.description || '') ||
+        localConfig.model_id !== selectedAgent.model_id ||
+        localConfig.system_prompt !== (selectedAgent.system_prompt || '') ||
+        localConfig.rag_enabled !== selectedAgent.rag_enabled ||
+        localConfig.temperature !== (selectedAgent.temperature ?? 0.7);
+      
       setHasChanges(changed);
       
-      if (changed && onConfigChange) {
-        onConfigChange(localConfig);
+      if (onConfigChange) {
+        onConfigChange({
+            ...localConfig,
+            agent_id: selectedAgent.id
+        });
       }
     }
-  }, [localConfig, config, onConfigChange]);
+  }, [localConfig, selectedAgent, onConfigChange]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!selectedAgentId) return;
+
     const updates: any = {};
-    
-    if (localConfig.model_id !== config?.model_id) {
-      updates.model_id = localConfig.model_id;
-    }
-    if (localConfig.system_prompt !== (config?.system_prompt || '')) {
-      updates.system_prompt = localConfig.system_prompt || null;
-    }
-    if (localConfig.rag_enabled !== config?.rag_enabled) {
-      updates.rag_enabled = localConfig.rag_enabled;
-    }
-    if (localConfig.agent_name !== (config?.agent_name || '')) {
-      updates.agent_name = localConfig.agent_name || null;
-    }
-    
-    // Note: If backend supports these, add them to updates
-    updates.temperature = localConfig.temperature;
-    updates.max_tokens = localConfig.max_tokens;
-    updates.top_p = localConfig.top_p;
+    if (localConfig.name !== selectedAgent?.name) updates.name = localConfig.name;
+    if (localConfig.description !== (selectedAgent?.description || '')) updates.description = localConfig.description;
+    if (localConfig.model_id !== selectedAgent?.model_id) updates.model_id = localConfig.model_id;
+    if (localConfig.system_prompt !== (selectedAgent?.system_prompt || '')) updates.system_prompt = localConfig.system_prompt;
+    if (localConfig.rag_enabled !== selectedAgent?.rag_enabled) updates.rag_enabled = localConfig.rag_enabled;
+    if (localConfig.temperature !== selectedAgent?.temperature) updates.temperature = localConfig.temperature;
 
     if (Object.keys(updates).length > 0) {
-      updateConfig(updates);
+      await updateAgent({ id: selectedAgentId, updates });
+    }
+  };
+
+  const handleCreateAgent = async (data: { name: string; description?: string }) => {
+    if (onCreateAgent) {
+        await onCreateAgent(data);
+    } else {
+        // Fallback local
+        const newAgent = await createAgent({
+            ...data,
+            model_id: 'mistral-large-latest',
+            rag_enabled: true,
+            temperature: 0.7
+        });
+        if (onAgentSelect) onAgentSelect(newAgent.id);
     }
   };
 
   // Grouper les modèles par provider
-  const modelsByProvider = models.reduce((acc, model) => {
+  const modelsByProvider = models.reduce((acc: any, model: any) => {
     if (!acc[model.provider]) {
       acc[model.provider] = [];
     }
@@ -160,16 +189,15 @@ export default function AgentConfigPanel({
     return acc;
   }, {} as Record<string, typeof models>);
 
-  if (isLoading) {
+  const isLoading = isLoadingAgents || isLoadingModels;
+
+  if (isLoading && !selectedAgent) {
     return (
       <Card className={`${className} animate-pulse`}>
-      <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings2 className="h-5 w-5" />
-            Configuration Agent
-          </CardTitle>
+        <CardHeader>
+          <CardTitle>Chargement...</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-64">
+        <CardContent className="h-64 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
@@ -177,210 +205,208 @@ export default function AgentConfigPanel({
   }
 
   return (
-    <Card className={`${className} border-border/50 bg-card/50 backdrop-blur-sm`}>
-      <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Settings2 className="h-5 w-5 text-primary" />
-          Configuration Agent
-        </CardTitle>
-        <CardDescription>
-          Personnalisez le comportement de votre agent IA
-        </CardDescription>
+    <Card className={`${className} border-border/50 bg-card/50 backdrop-blur-sm flex flex-col h-full`}>
+      <CardHeader className="pb-4 shrink-0">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Settings2 className="h-5 w-5 text-primary" />
+              Configuration
+            </CardTitle>
+            <CreateAgentDialog 
+                onCreate={handleCreateAgent}
+                trigger={
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Plus className="h-4 w-4" />
+                    </Button>
+                }
+            />
+          </div>
+
+          {/* SÉLECTEUR D'AGENT */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">
+                Agent Actif
+            </Label>
+            <Select 
+                value={selectedAgentId || ''} 
+                onValueChange={(val) => onAgentSelect && onAgentSelect(val)}
+                disabled={isLoadingAgents}
+            >
+                <SelectTrigger className="w-full bg-secondary/50 border-primary/20 focus:ring-primary/20 h-10">
+                    <SelectValue placeholder="Sélectionner un agent" />
+                </SelectTrigger>
+                <SelectContent>
+                    {agents.map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id} className="cursor-pointer">
+                            <div className="flex items-center gap-2">
+                                <div className="h-5 w-5 rounded-md bg-primary/10 flex items-center justify-center">
+                                    <Bot className="h-3 w-3 text-primary" />
+                                </div>
+                                <span className="font-medium">{agent.name}</span>
+                            </div>
+                        </SelectItem>
+                    ))}
+                    {agents.length === 0 && (
+                        <div className="p-2 text-xs text-center text-muted-foreground">
+                            Aucun agent. Créez-en un !
+                        </div>
+                    )}
+                </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
       
-      <CardContent className="space-y-6">
-        {/* Sélection du modèle */}
-        <div className="space-y-2" id="agent-model-select">
-          <Label className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-purple-500" />
-            Modèle LLM
-          </Label>
-          <Select
-            value={localConfig.model_id}
-            onValueChange={(value) => 
-              setLocalConfig(prev => ({ ...prev, model_id: value }))
-            }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Sélectionner un modèle" />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(modelsByProvider).map(([provider, providerModels]) => (
-                <div key={provider}>
-                  <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase">
-                    {provider}
-                  </div>
-                  {providerModels.map((model) => (
-                    <SelectItem 
-                      key={model.id} 
-                      value={model.id}
-                      disabled={model.premium && !isPremium}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{model.name}</span>
-                        {model.premium && (
-                          <Badge 
-                            variant="default" 
-                            className={cn(
-                              "text-xs text-white",
-                              mounted && isPremium ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-zinc-700'
-                            )}
-                          >
-                            <Crown className="h-3 w-3 mr-1" />
-                            Premium
-                          </Badge>
-                        )}
-                        {model.new && (
-                          <Badge variant="outline" className="text-xs border-green-500 text-green-600">
-                            <Zap className="h-3 w-3 mr-1" />
-                            New
-                          </Badge>
-                        )}
-                        {model.recommended && !model.premium && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Sparkles className="h-3 w-3 mr-1" />
-                            Recommandé
-                          </Badge>
-                        )}
-                      </div>
-                      {model.description && (
-                        <span className="text-xs text-muted-foreground ml-2">
-                          {model.description}
-                        </span>
-                      )}
-                    </SelectItem>
-                  ))}
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-6 pb-6">
+        <CardContent className="p-0 space-y-6">
+            
+            {/* Identité Agent (Nom/Desc) */}
+            <div className="space-y-3">
+                <div className="grid gap-2">
+                    <Label>Nom</Label>
+                    <Input 
+                        value={localConfig.name} 
+                        onChange={e => setLocalConfig(prev => ({ ...prev, name: e.target.value }))}
+                        className="bg-secondary/30"
+                    />
                 </div>
-              ))}
-            </SelectContent>
-          </Select>
-          {!isPremium && (
-            <p className="text-[10px] text-amber-500 flex items-center gap-1">
-              <Crown className="h-3 w-3" />
-              Certains modèles nécessitent un abonnement Pro
-            </p>
-          )}
-        </div>
-
-        {/* Toggle RAG */}
-        <div className="flex items-center justify-between" id="agent-rag-toggle">
-          <div className="space-y-0.5">
-            <Label className="flex items-center gap-2">
-              <Database className="h-4 w-4 text-blue-500" />
-              Recherche RAG
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Chercher dans vos documents personnels
-            </p>
-          </div>
-          <Switch
-            checked={localConfig.rag_enabled}
-            onCheckedChange={(checked) =>
-              setLocalConfig(prev => ({ ...prev, rag_enabled: checked }))
-            }
-          />
-        </div>
-
-        {/* Prompt système */}
-        <div className="space-y-3" id="agent-system-prompt">
-          <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            <Sparkles className="h-3.5 w-3.5 text-yellow-500" />
-            Prompt Système
-          </Label>
-          <Textarea
-            placeholder="Instructions personnalisées pour l'agent..."
-            value={localConfig.system_prompt}
-            onChange={(e) =>
-              setLocalConfig(prev => ({ ...prev, system_prompt: e.target.value }))
-            }
-            className="min-h-[100px] bg-secondary/30 border-border/50 text-sm resize-none focus-visible:ring-primary/40"
-          />
-          <p className="text-[10px] text-muted-foreground italic">
-            Laissez vide pour utiliser le prompt par défaut (expert en RAG).
-          </p>
-        </div>
-
-        <Separator className="bg-border/50" />
-
-        {/* Paramètres de Génération */}
-        <div className="space-y-6">
-          <div 
-            className="flex items-center justify-between cursor-pointer group"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-          >
-            <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer group-hover:text-foreground transition-colors">
-              <Settings2 className="h-3.5 w-3.5 text-primary" />
-              Génération
-            </Label>
-            <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", showAdvanced && "rotate-180")} />
-          </div>
-
-          {showAdvanced && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-              {/* Temperature */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <Flame className="h-3.5 w-3.5 text-orange-500" />
-                    Température
-                  </Label>
-                  <Badge variant="secondary" className="font-mono text-[10px] h-5 px-1.5">
-                    {localConfig.temperature}
-                  </Badge>
+                <div className="grid gap-2">
+                    <Label>Description</Label>
+                    <Input 
+                        value={localConfig.description} 
+                        onChange={e => setLocalConfig(prev => ({ ...prev, description: e.target.value }))}
+                        className="bg-secondary/30 text-xs"
+                        placeholder="Description courte..."
+                    />
                 </div>
-                <Slider 
-                  value={[localConfig.temperature]} 
-                  min={0} 
-                  max={2} 
-                  step={0.1}
-                  onValueChange={([v]) => setLocalConfig(prev => ({ ...prev, temperature: v }))}
-                  className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
-                />
-                <p className="text-[10px] text-muted-foreground leading-tight">
-                  Contrôle le caractère aléatoire. 0 est précis, 1+ est créatif.
-                </p>
-              </div>
-
-              {/* Max Tokens */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <Maximize2 className="h-3.5 w-3.5 text-blue-500" />
-                    Longueur Max
-                  </Label>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge variant="secondary" className="font-mono text-[10px] h-5 px-1.5 flex items-center gap-1">
-                          {localConfig.max_tokens}
-                          <Info className="h-3 w-3 opacity-50" />
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent side="left" className="text-[10px]">
-                        Tokens maximum dans la réponse
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <Slider 
-                  value={[localConfig.max_tokens]} 
-                  min={64} 
-                  max={8192} 
-                  step={64}
-                  onValueChange={([v]) => setLocalConfig(prev => ({ ...prev, max_tokens: v }))}
-                  className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
-                />
-              </div>
             </div>
-          )}
-        </div>
 
-        {/* Bouton sauvegarder */}
+            <Separator className="bg-border/50" />
+
+          {/* Sélection du modèle */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-purple-500" />
+              Modèle LLM
+            </Label>
+            <Select
+              value={localConfig.model_id}
+              onValueChange={(value) => 
+                setLocalConfig(prev => ({ ...prev, model_id: value }))
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Sélectionner un modèle" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(modelsByProvider).map(([provider, providerModels]: [string, any]) => (
+                  <div key={provider}>
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase">
+                      {provider}
+                    </div>
+                    {providerModels.map((model: any) => (
+                      <SelectItem 
+                        key={model.id} 
+                        value={model.id}
+                        disabled={model.premium && !isPremium}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>{model.name}</span>
+                          {model.premium && (
+                            <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-gradient-brand text-white border-0">
+                              PRO
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </div>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Toggle RAG */}
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/10">
+            <div className="space-y-0.5">
+              <Label className="flex items-center gap-2 text-sm">
+                <Database className="h-4 w-4 text-blue-500" />
+                RAG Knowledge
+              </Label>
+              <p className="text-[10px] text-muted-foreground">
+                Accès aux documents
+              </p>
+            </div>
+            <Switch
+              checked={localConfig.rag_enabled}
+              onCheckedChange={(checked) =>
+                setLocalConfig(prev => ({ ...prev, rag_enabled: checked }))
+              }
+            />
+          </div>
+
+          {/* Prompt système */}
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <Sparkles className="h-3.5 w-3.5 text-yellow-500" />
+              Prompt Système
+            </Label>
+            <Textarea
+              placeholder="Instructions personnalisées pour l'agent..."
+              value={localConfig.system_prompt}
+              onChange={(e) =>
+                setLocalConfig(prev => ({ ...prev, system_prompt: e.target.value }))
+              }
+              className="min-h-[120px] bg-secondary/30 border-border/50 text-sm resize-none focus-visible:ring-primary/40 leading-relaxed"
+            />
+          </div>
+
+          {/* Paramètres Avancés */}
+          <div className="space-y-6 pt-2">
+            <div 
+              className="flex items-center justify-between cursor-pointer group hover:bg-secondary/20 p-2 rounded-lg transition-colors -mx-2"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider cursor-pointer">
+                <Settings2 className="h-3.5 w-3.5 text-primary" />
+                Paramètres Avancés
+              </Label>
+              <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform duration-200", showAdvanced && "rotate-180")} />
+            </div>
+
+            {showAdvanced && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300 pl-2 border-l-2 border-border/50 ml-1">
+                {/* Temperature */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Flame className="h-3.5 w-3.5 text-orange-500" />
+                      Température: {localConfig.temperature}
+                    </Label>
+                  </div>
+                  <Slider 
+                    value={[localConfig.temperature]} 
+                    min={0} 
+                    max={2} 
+                    step={0.1}
+                    onValueChange={([v]) => setLocalConfig(prev => ({ ...prev, temperature: v }))}
+                    className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </div>
+
+      {/* Footer sticky avec bouton sauvegarder */}
+      <div className="p-6 border-t border-border/50 bg-card/50 backdrop-blur-xl mt-auto">
         <Button
           onClick={handleSave}
           disabled={!hasChanges || isUpdating}
-          className="w-full"
-          id="agent-save-btn"
+          className="w-full shadow-lg shadow-primary/10"
+          size="lg"
         >
           {isUpdating ? (
             <>
@@ -390,11 +416,12 @@ export default function AgentConfigPanel({
           ) : (
             <>
               <Save className="h-4 w-4 mr-2" />
-              {hasChanges ? 'Sauvegarder les modifications' : 'Aucune modification'}
+              {hasChanges ? 'Sauvegarder les modifications' : 'Tout est à jour'}
             </>
           )}
         </Button>
-      </CardContent>
+      </div>
     </Card>
   );
 }
+
