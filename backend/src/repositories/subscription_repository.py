@@ -315,9 +315,12 @@ class SubscriptionRepository(BaseRepository[SubscriptionInfo]):
                 requests_count=data.get("requests_count", 0),
                 documents_count=data.get("documents_count", 0),
                 api_keys_count=data.get("api_keys_count", 0),
+                agents_count=data.get("agents_count", 0),
+                tokens_used=data.get("tokens_used", 0),
                 requests_limit=data.get("requests_limit", 100),
                 documents_limit=data.get("documents_limit", 10),
                 api_keys_limit=data.get("api_keys_limit", 1),
+                agents_limit=data.get("agents_limit", 1),
                 overage_requests=data.get("overage_requests", 0),
             )
         except Exception as e:

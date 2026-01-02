@@ -220,6 +220,9 @@ async def get_my_usage(
             "documents_limit": user.documents_limit,
             "api_keys_count": 0,
             "api_keys_limit": user.api_keys_limit,
+            "agents_count": 0,
+            "agents_limit": getattr(user, "agents_limit", 1),
+            "tokens_used": 0,
         }
 
     # Merge usage stats with plan info

@@ -191,11 +191,14 @@ class UsageStats(BaseModel):
     requests_count: int = Field(default=0, description="Requêtes effectuées")
     documents_count: int = Field(default=0, description="Documents créés")
     api_keys_count: int = Field(default=0, description="Clés API actives")
+    agents_count: int = Field(default=0, description="Agents actifs")
+    tokens_used: int = Field(default=0, description="Tokens consommés")
 
     # Limites du plan
     requests_limit: int = Field(default=100, description="Limite requêtes")
     documents_limit: int = Field(default=10, description="Limite documents")
     api_keys_limit: int = Field(default=1, description="Limite clés")
+    agents_limit: int = Field(default=1, description="Limite agents")
 
     # Overage
     overage_requests: int = Field(default=0, description="Requêtes au-delà du quota")
