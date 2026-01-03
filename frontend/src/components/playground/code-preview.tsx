@@ -164,7 +164,7 @@ console.log(data);`;
       </div>
 
       <Tabs defaultValue="curl" className="flex-1 flex flex-col">
-        <div className="px-4 py-1 bg-zinc-900/50">
+        <div className="px-4 py-1 bg-zinc-900/50 flex items-center justify-between">
           <TabsList className="bg-transparent border-none gap-4">
             <TabsTrigger value="curl" className="data-[state=active]:bg-white/5 data-[state=active]:text-emerald-400 text-zinc-500 text-xs gap-1.5 px-3">
               <Terminal className="h-3 w-3" /> cURL
@@ -176,6 +176,23 @@ console.log(data);`;
               <Globe className="h-3 w-3" /> JavaScript
             </TabsTrigger>
           </TabsList>
+          
+          {/* Copy button - always visible */}
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-7 gap-1.5 text-xs text-zinc-400 hover:text-white"
+            onClick={() => {
+              const val = document.querySelector('[data-state="active"].m-0')?.textContent || "";
+              copyToClipboard(val);
+            }}
+          >
+            {copied ? (
+              <><Check className="h-3.5 w-3.5 text-green-400" /> Copié</>
+            ) : (
+              <><Copy className="h-3.5 w-3.5" /> Copier</>
+            )}
+          </Button>
         </div>
 
         <div className="flex-1 relative overflow-hidden">
@@ -190,18 +207,6 @@ console.log(data);`;
             <TabsContent value="js" className="m-0 font-mono text-xs text-zinc-300 leading-relaxed whitespace-pre min-w-max">
               {generateJS()}
             </TabsContent>
-
-            <Button 
-              size="icon" 
-              variant="secondary" 
-              className="fixed bottom-8 right-8 h-8 w-8 bg-zinc-800 opacity-70 hover:opacity-100 transition-opacity z-10"
-              onClick={() => {
-                const val = document.querySelector('[data-state="active"].m-0')?.textContent || "";
-                copyToClipboard(val);
-              }}
-            >
-              {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
-            </Button>
           </div>
         </div>
       </Tabs>
