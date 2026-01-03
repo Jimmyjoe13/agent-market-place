@@ -6,23 +6,18 @@ Endpoints dédiés au plugin assistant (widget web).
 Gère la génération du code d'intégration, le script JS, et les requêtes du widget.
 """
 
-import os
 from pathlib import Path
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, HttpUrl
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
-from src.api.auth import require_api_key, get_api_key_repo
-from src.api.deps import get_current_user, UserWithSubscription, get_user_repo
+from src.api.auth import require_api_key
+from src.api.deps import get_current_user, CurrentUser
 from src.config.settings import get_settings
 from src.models.api_key import ApiKeyValidation
-from src.services.rag_engine import RAGEngine
 from src.services.circuit_breaker import get_circuit_breaker
 from src.providers.llm import get_llm_provider
-from src.repositories.conversation_repository import ConversationRepository
-from src.models.conversation import ConversationCreate, ConversationMessage
 from src.config.logging_config import get_logger
 
 router = APIRouter(prefix="/assistant-plugin", tags=["Assistant Plugin"])
@@ -37,10 +32,15 @@ class EmbedConfig(BaseModel):
     position: str = "bottom-right"
     title: str = "Assistant IA"
 
+class MessageItem(BaseModel):
+    """Un message dans l'historique de conversation."""
+    role: str  # "user" or "assistant"
+    content: str
+
 class PluginQueryRequest(BaseModel):
     """Requête de chat depuis le plugin."""
     query: str
-    history: list[ConversationMessage] = []
+    history: list[MessageItem] = []
     session_id: str | None = None
 
 class PluginResponse(BaseModel):
@@ -54,7 +54,7 @@ class PluginResponse(BaseModel):
 @router.post("/embed")
 async def generate_embed_code(
     config: EmbedConfig,
-    current_user: UserWithSubscription = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> dict:
     """
     Génère le code JavaScript à intégrer sur un site tiers.
