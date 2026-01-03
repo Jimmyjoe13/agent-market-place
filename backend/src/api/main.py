@@ -41,6 +41,7 @@ from src.api.routes_admin import admin_router
 from src.api.routes_agent import router as agent_router
 from src.api.routes_agent_config import router as agent_config_router
 from src.api.routes_auth import router as auth_router
+from src.api.routes_assistant import router as assistant_router
 from src.api.routes_billing import router as billing_router
 from src.api.routes_console import router as console_router
 from src.api.routes_jobs import router as jobs_router
@@ -379,6 +380,9 @@ def create_app() -> FastAPI:
 
     # Inclure les routes de facturation
     app.include_router(billing_router, prefix="/api/v1")
+
+    # Inclure les routes du plugin assistant
+    app.include_router(assistant_router, prefix="/api/v1")
 
     # Route de santé à la racine (non protégée)
     @app.get(

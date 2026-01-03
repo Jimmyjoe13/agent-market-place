@@ -10,6 +10,7 @@ langchain-community>=0.3.0
 
 # ===== Vector Store & Database =====
 supabase>=2.10.0
+realtime>=1.0.0
 pgvector>=0.3.0
 
 # ===== Data Providers =====

@@ -80,39 +80,35 @@ def decode_supabase_jwt(token: str) -> dict | None:
     try:
         # En production, on valide la signature avec le secret JWT
         if settings.supabase_jwt_secret:
-            # Essayer d'abord HS256 (le plus courant avec jwt_secret)
-            try:
-                payload = jwt.decode(
-                    token,
-                    settings.supabase_jwt_secret,
-                    algorithms=["HS256"],
-                    audience="authenticated",
-                )
-                return payload
-            except JWTError as hs256_error:
-                # Si HS256 échoue (peut-être token RS256), essayer sans vérification
-                # mais avec validation de l'audience et expiration
-                logger.warning(
-                    "HS256 decode failed, falling back to unverified decode", error=str(hs256_error)
-                )
-                payload = jwt.get_unverified_claims(token)
-
-                # Validation manuelle de l'audience
-                if payload.get("aud") != "authenticated":
-                    logger.error("JWT audience mismatch")
-                    return None
-
-                # Validation de l'expiration
-                import time
-
-                if payload.get("exp", 0) < time.time():
-                    logger.error("JWT expired")
-                    return None
-
-                return payload
+            # Supabase utilise généralement HS256 avec le JWT secret
+            # On essaie les deux algorithmes supportés (HS256, RS256)
+            last_error: JWTError | None = None
+            
+            for algorithm in ["HS256", "RS256"]:
+                try:
+                    payload = jwt.decode(
+                        token,
+                        settings.supabase_jwt_secret,
+                        algorithms=[algorithm],
+                        audience="authenticated",
+                    )
+                    logger.debug(f"JWT decoded successfully with {algorithm}")
+                    return payload
+                except JWTError as e:
+                    last_error = e
+                    continue
+            
+            # Si aucun algorithme n'a fonctionné, rejeter le token
+            # IMPORTANT: Ne jamais utiliser get_unverified_claims() en production
+            logger.error(
+                "JWT decode failed for all algorithms",
+                error=str(last_error) if last_error else "Unknown error",
+            )
+            return None
         else:
             # En développement sans secret, on décode sans vérifier
-            logger.warning("SUPABASE_JWT_SECRET not set, skipping signature verification")
+            # ATTENTION: Uniquement pour le développement local!
+            logger.warning("SUPABASE_JWT_SECRET not set, skipping signature verification (DEV ONLY)")
             payload = jwt.get_unverified_claims(token)
 
         return payload

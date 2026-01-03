@@ -23,6 +23,7 @@ import {
   BookOpen,
   Menu,
   X,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -66,6 +67,12 @@ const navItems = [
     href: "/documents",
     icon: FileUp,
     description: "Gérer les documents",
+  },
+  {
+    title: "Assistant",
+    href: "/assistant",
+    icon: Sparkles,
+    description: "Widget Chatbot",
   },
   {
     title: "Clés API",
