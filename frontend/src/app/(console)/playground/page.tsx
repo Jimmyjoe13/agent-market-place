@@ -417,6 +417,24 @@ export default function PlaygroundPage() {
                 </Button>
               </div>
               
+              {/* Sélecteur de clé API */}
+              <div className="mb-4">
+                <label className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2 block">
+                  Clé API Active
+                </label>
+                <select
+                  value={selectedKeyId || ''}
+                  onChange={(e) => setSelectedKeyId(e.target.value)}
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  {keys.map((key) => (
+                    <option key={key.id} value={key.id}>
+                      {key.name} {key.agent_name ? `(${key.agent_name})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
               {/* Info sur la clé sélectionnée */}
               {selectedKey && (
                 <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/10">

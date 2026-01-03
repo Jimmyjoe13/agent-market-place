@@ -56,7 +56,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         """
         try:
             # Récupérer la clé
-            key_response = self.table.select("*").eq("id", id).single().execute()
+            key_response = self.table.select("*").eq("id", id).maybe_single().execute()
             
             if not key_response.data:
                 return None
@@ -66,7 +66,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
                 self.client.from_("agents")
                 .select("id, name, model_id, rag_enabled")
                 .eq("api_key_id", id)
-                .maybeSingle()
+                .maybe_single()
                 .execute()
             )
             
