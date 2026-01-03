@@ -65,8 +65,8 @@ export function CodePreview({ parameters, requestContent, agentId, apiKey }: Cod
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Afficher la clé complète ou placeholder
-  const displayKey = apiKey || "YOUR_API_KEY";
+  // Afficher le début de la clé + "..." (la clé est hashée côté serveur)
+  const displayKey = apiKey ? `${apiKey.slice(0, 15)}...` : "YOUR_API_KEY";
   
   // Escape helper pour JSON dans cURL (single quotes extérieures)
   const escapeForJson = (str: string): string => {
