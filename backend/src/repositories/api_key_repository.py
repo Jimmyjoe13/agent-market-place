@@ -9,10 +9,10 @@ Ce module fournit les opérations CRUD pour les clés API :
 - Validation avec mise à jour d'usage
 - Révocation et listing
 
-Architecture v3:
-- 1 Clé API = 1 Agent = 1 RAG
-- L'agent est lié à la clé via agents.api_key_id
-- Supprimer la clé supprime l'agent (CASCADE)
+Architecture v2:
+- Chaque clé API est liée à un agent via api_keys.agent_id
+- Un agent peut avoir plusieurs clés API
+- La configuration LLM est sur l'agent, pas sur la clé
 """
 
 import hashlib
@@ -30,7 +30,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
 
     Gère la création, validation et révocation des clés.
     Les clés sont stockées sous forme de hash SHA-256.
-    Chaque clé est liée à un agent.
+    Chaque clé est liée à un agent via agent_id.
 
     Attributes:
         KEY_PREFIX: Préfixe des clés générées ("sk-proj-").
@@ -55,38 +55,30 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             ApiKeyInfo ou None si non trouvée.
         """
         try:
-            # Récupérer la clé
-            key_response = self.table.select("*").eq("id", id).maybe_single().execute()
-            
-            if not key_response.data:
-                return None
-            
-            # Récupérer l'agent lié (via agents.api_key_id)
-            agent_response = (
-                self.client.from_("agents")
-                .select("id, name, model_id, rag_enabled")
-                .eq("api_key_id", id)
+            # Récupérer la clé avec JOIN sur agents via api_keys.agent_id
+            response = (
+                self.table.select("*, agents(id, name, model_id, rag_enabled)")
+                .eq("id", id)
                 .maybe_single()
                 .execute()
             )
             
-            return ApiKeyInfo(**self._format_key_data(
-                key_response.data, 
-                agent_response.data if agent_response.data else None
-            ))
+            if not response.data:
+                return None
+            
+            return ApiKeyInfo(**self._format_key_data(response.data))
         except Exception as e:
             self.logger.error("Error fetching API key", id=id, error=str(e))
             return None
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """
-        Crée une nouvelle clé API.
-
-        Architecture v3: La clé est créée d'abord, l'agent ensuite.
+        Crée une nouvelle clé API liée à un agent.
 
         Args:
             data: Dictionnaire avec:
                 - name: Nom de la clé
+                - agent_id: UUID de l'agent (requis)
                 - user_id: UUID de l'utilisateur (requis)
                 - scopes: Liste des permissions
                 - rate_limit_per_minute: Limite par minute
@@ -96,6 +88,8 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             Dictionnaire avec la clé complète (⚠️ affichée une seule fois).
         """
         # Validation
+        if not data.get("agent_id"):
+            raise ValueError("agent_id is required")
         if not data.get("user_id"):
             raise ValueError("user_id is required")
 
@@ -115,6 +109,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         # Préparer les données pour insertion
         insert_data = {
             "name": data["name"],
+            "agent_id": str(data["agent_id"]),
             "user_id": str(data["user_id"]),
             "key_hash": key_hash,
             "key_prefix": key_prefix,
@@ -130,6 +125,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             "API key created",
             id=created["id"],
             name=data["name"],
+            agent_id=str(data["agent_id"]),
             prefix=key_prefix,
         )
 
@@ -227,6 +223,7 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
     def list_keys(
         self,
         user_id: str | None = None,
+        agent_id: str | None = None,
         page: int = 1,
         per_page: int = 20,
         include_inactive: bool = False,
@@ -234,10 +231,9 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         """
         Liste les clés API avec pagination.
 
-        Architecture v3: Récupère les agents via agents.api_key_id.
-
         Args:
             user_id: Filtrer par utilisateur.
+            agent_id: Filtrer par agent.
             page: Numéro de page (1-indexed).
             per_page: Nombre de résultats par page.
             include_inactive: Inclure les clés révoquées.
@@ -245,10 +241,14 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         Returns:
             Tuple (liste des clés, total).
         """
-        query = self.table.select("*", count="exact")
+        # JOIN avec agents via api_keys.agent_id
+        query = self.table.select("*, agents(id, name, model_id, rag_enabled)", count="exact")
 
         if user_id:
             query = query.eq("user_id", user_id)
+
+        if agent_id:
+            query = query.eq("agent_id", agent_id)
 
         if not include_inactive:
             query = query.eq("is_active", True)
@@ -260,28 +260,34 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
 
         response = query.execute()
 
-        # Récupérer les agents associés pour chaque clé
-        key_ids = [k["id"] for k in response.data]
-        agents_map = {}
-        
-        if key_ids:
-            agents_response = (
-                self.client.from_("agents")
-                .select("api_key_id, id, name, model_id, rag_enabled")
-                .in_("api_key_id", key_ids)
-                .execute()
-            )
-            agents_map = {a["api_key_id"]: a for a in agents_response.data}
-
-        keys = [
-            ApiKeyInfo(**self._format_key_data(k, agents_map.get(k["id"])))
-            for k in response.data
-        ]
+        keys = [ApiKeyInfo(**self._format_key_data(k)) for k in response.data]
         total = response.count or len(keys)
 
         return keys, total
 
-    # Note: get_by_agent obsolète dans architecture v3 (1 clé = 1 agent)
+    def get_by_agent(self, agent_id: str) -> list[ApiKeyInfo]:
+        """
+        Récupère toutes les clés d'un agent.
+
+        Args:
+            agent_id: UUID de l'agent.
+
+        Returns:
+            Liste des clés API.
+        """
+        try:
+            response = (
+                self.table.select("*, agents(id, name, model_id, rag_enabled)")
+                .eq("agent_id", agent_id)
+                .eq("is_active", True)
+                .order("created_at", desc=True)
+                .execute()
+            )
+
+            return [ApiKeyInfo(**self._format_key_data(k)) for k in response.data]
+        except Exception as e:
+            self.logger.error("Error fetching agent keys", agent_id=agent_id, error=str(e))
+            return []
 
     def count_user_keys(self, user_id: str) -> int:
         """
@@ -357,18 +363,18 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         return hashlib.sha256(key.encode()).hexdigest()
 
     @staticmethod
-    def _format_key_data(data: dict, agent_data: dict | None = None) -> dict:
+    def _format_key_data(data: dict) -> dict:
         """
         Formate les données de la base pour le modèle.
         
-        Architecture v3: agent_data est passé séparément car la relation
-        est maintenant agents.api_key_id -> api_keys.id.
+        Architecture v2: L'agent est récupéré via JOIN sur api_keys.agent_id.
         """
-        agent = agent_data or {}
+        # Extraire les données de l'agent depuis le JOIN
+        agent_data = data.get("agents", {}) or {}
 
         return {
             "id": data["id"],
-            "agent_id": agent.get("id"),  # ID de l'agent lié
+            "agent_id": data.get("agent_id"),
             "name": data["name"],
             "prefix": data["key_prefix"],
             "scopes": data["scopes"] or [],
@@ -377,8 +383,8 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             "expires_at": data.get("expires_at"),
             "last_used_at": data.get("last_used_at"),
             "created_at": data.get("created_at"),
-            # Données de l'agent
-            "agent_name": agent.get("name"),
-            "agent_model_id": agent.get("model_id", "mistral-large-latest"),
-            "rag_enabled": agent.get("rag_enabled", True),
+            # Données de l'agent (depuis le JOIN)
+            "agent_name": agent_data.get("name"),
+            "agent_model_id": agent_data.get("model_id", "mistral-large-latest"),
+            "rag_enabled": agent_data.get("rag_enabled", True),
         }

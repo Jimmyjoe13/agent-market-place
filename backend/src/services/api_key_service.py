@@ -88,7 +88,7 @@ class ApiKeyService:
         scopes: list[str],
         rate_limit_per_minute: int = 60,
         expires_in_days: int | None = None,
-        # Config agent (nouvelle architecture)
+        # Config agent
         agent_name: str | None = None,
         agent_model_id: str = "mistral-large-latest",
         agent_system_prompt: str | None = None,
@@ -97,10 +97,9 @@ class ApiKeyService:
         """
         Crée une clé API avec son agent dédié.
 
-        Architecture v3 (1 Clé = 1 Agent = 1 RAG):
-        - Une clé API possède exactement un agent
-        - L'agent est créé automatiquement avec la clé
-        - Supprimer la clé supprime l'agent (CASCADE)
+        Architecture v2:
+        1. Crée d'abord un agent
+        2. Crée la clé API liée à cet agent (api_keys.agent_id)
 
         Args:
             user_id: UUID de l'utilisateur propriétaire.
@@ -145,19 +144,7 @@ class ApiKeyService:
                 requested_scopes=scopes,
             )
 
-        # 3. Créer la clé API d'abord (sans agent_id pour l'instant)
-        create_data = {
-            "user_id": user_id,
-            "name": name,
-            "scopes": safe_scopes,
-            "rate_limit_per_minute": rate_limit_per_minute,
-            "expires_in_days": expires_in_days,
-        }
-
-        result = self._key_repo.create(create_data)
-        key_id = result["id"]
-
-        # 4. Créer l'agent lié à cette clé
+        # 3. Créer l'agent D'ABORD
         from src.models.agent import AgentCreate
         from src.repositories.agent_repository import AgentRepository
 
@@ -172,16 +159,24 @@ class ApiKeyService:
             rag_enabled=agent_rag_enabled,
         )
         
-        created_agent = agent_repo.create_agent_with_key(
-            user_id=user_id, 
-            agent_data=new_agent, 
-            api_key_id=key_id
-        )
+        created_agent = agent_repo.create_agent(user_id=user_id, agent_data=new_agent)
+
+        # 4. Créer la clé API liée à l'agent
+        create_data = {
+            "user_id": user_id,
+            "agent_id": str(created_agent.id),
+            "name": name,
+            "scopes": safe_scopes,
+            "rate_limit_per_minute": rate_limit_per_minute,
+            "expires_in_days": expires_in_days,
+        }
+
+        result = self._key_repo.create(create_data)
 
         logger.info(
             "API key and agent created",
             user_id=user_id,
-            key_id=key_id,
+            key_id=result["id"],
             agent_id=str(created_agent.id),
             key_name=name,
             agent_name=final_agent_name,
