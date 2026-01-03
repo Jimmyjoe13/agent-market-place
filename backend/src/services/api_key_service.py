@@ -243,6 +243,7 @@ class ApiKeyService:
         self,
         user_id: str,
         key_id: str,
+        delete_agent: bool = True,
     ) -> bool:
         """
         Révoque une clé appartenant à un utilisateur.
@@ -250,6 +251,7 @@ class ApiKeyService:
         Args:
             user_id: UUID de l'utilisateur propriétaire.
             key_id: UUID de la clé à révoquer.
+            delete_agent: Si True, supprime aussi l'agent lié et ses documents.
 
         Returns:
             True si révoquée, False sinon.
@@ -257,18 +259,17 @@ class ApiKeyService:
         Raises:
             PermissionError: Si la clé n'appartient pas à l'utilisateur.
         """
-        # Vérifier appartenance
+        # Vérifier appartenance et récupérer les infos
         key = self._key_repo.get_by_id(key_id)
 
         if not key:
             logger.warning("Key not found for revocation", key_id=key_id)
             return False
 
-        # Note: ApiKeyInfo n'a pas user_id directement exposé,
-        # on doit le vérifier via la base. Pour l'instant, on fait confiance
-        # au fait que routes_console filtre déjà par user_id.
-        # TODO: Ajouter user_id à ApiKeyInfo pour vérification côté service.
+        # Récupérer l'agent_id avant suppression
+        agent_id = key.agent_id
 
+        # Révoquer la clé
         success = self._key_repo.revoke(key_id)
 
         if success:
@@ -277,6 +278,37 @@ class ApiKeyService:
                 user_id=user_id,
                 key_id=key_id,
             )
+
+            # Supprimer l'agent lié si demandé
+            if delete_agent and agent_id:
+                try:
+                    from src.repositories.agent_repository import AgentRepository
+                    
+                    agent_repo = AgentRepository()
+                    
+                    # Supprimer l'agent (les documents seront gérés par ON DELETE CASCADE/SET NULL)
+                    deleted = agent_repo.delete(agent_id)
+                    
+                    if deleted:
+                        logger.info(
+                            "Agent deleted with API key",
+                            agent_id=agent_id,
+                            key_id=key_id,
+                            user_id=user_id,
+                        )
+                    else:
+                        logger.warning(
+                            "Failed to delete agent with API key",
+                            agent_id=agent_id,
+                            key_id=key_id,
+                        )
+                except Exception as e:
+                    logger.error(
+                        "Error deleting agent with API key",
+                        agent_id=agent_id,
+                        key_id=key_id,
+                        error=str(e),
+                    )
 
         return success
 

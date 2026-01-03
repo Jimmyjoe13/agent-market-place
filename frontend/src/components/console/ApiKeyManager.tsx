@@ -249,12 +249,30 @@ function KeyRow({
       <AlertDialog open={showRevokeDialog} onOpenChange={setShowRevokeDialog}>
         <AlertDialogContent className="bg-zinc-900 border-zinc-800">
           <AlertDialogHeader>
-            <AlertDialogTitle>Révoquer cette clé API ?</AlertDialogTitle>
-            <AlertDialogDescription className="text-zinc-400">
-              Cette action est irréversible. Toutes les applications utilisant cette clé 
-              cesseront de fonctionner immédiatement.
-              <br /><br />
-              <strong className="text-zinc-300">Clé :</strong> {apiKey.name} ({apiKey.prefix}...)
+            <AlertDialogTitle className="flex items-center gap-2 text-red-400">
+              <AlertTriangle className="h-5 w-5" />
+              Supprimer cette clé API ?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400 space-y-3">
+              <p>
+                <strong className="text-red-400">⚠️ Action irréversible !</strong>
+              </p>
+              <p>
+                Supprimer cette clé entraînera également la suppression de :
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                <li>L'agent <strong>{apiKey.agent_name || "associé"}</strong></li>
+                <li>Tous les documents RAG de cet agent</li>
+                <li>L'historique des conversations</li>
+              </ul>
+              <p className="text-sm mt-2">
+                Toutes les applications utilisant cette clé cesseront de fonctionner.
+              </p>
+              <div className="mt-3 p-2 rounded bg-zinc-800 text-sm">
+                <span className="text-zinc-500">Clé :</span>{" "}
+                <span className="text-zinc-300">{apiKey.name}</span>{" "}
+                <span className="text-zinc-500">({apiKey.prefix}...)</span>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -266,7 +284,7 @@ function KeyRow({
               className="bg-red-600 hover:bg-red-500"
               disabled={isRevoking}
             >
-              {isRevoking ? "Révocation..." : "Révoquer la clé"}
+              {isRevoking ? "Suppression..." : "Supprimer définitivement"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

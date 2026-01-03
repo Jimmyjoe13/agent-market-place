@@ -171,6 +171,9 @@ export interface ApiKeyInfo {
   expires_at: string | null;
   last_used_at: string | null;
   created_at: string;
+  // Agent info
+  agent_id?: string;
+  agent_name?: string;
 }
 
 // ===== Analytics Types =====
