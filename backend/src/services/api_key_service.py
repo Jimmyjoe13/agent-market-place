@@ -88,20 +88,19 @@ class ApiKeyService:
         scopes: list[str],
         rate_limit_per_minute: int = 60,
         expires_in_days: int | None = None,
-        agent_id: str | None = None,
+        # Config agent (nouvelle architecture)
+        agent_name: str | None = None,
+        agent_model_id: str = "mistral-large-latest",
+        agent_system_prompt: str | None = None,
+        agent_rag_enabled: bool = True,
     ) -> CreateKeyResult:
         """
-        Crée une clé API pour un utilisateur avec vérification des quotas.
+        Crée une clé API avec son agent dédié.
 
-        Architecture v2:
-        - Une clé API est liée à un agent
-        - Si agent_id n'est pas fourni, crée un agent par défaut
-
-        Règles métier appliquées :
-        1. Vérifie que l'utilisateur n'a pas atteint sa limite de clés
-        2. Filtre les scopes interdits (admin)
-        3. Crée/utilise un agent
-        4. Génère la clé via le repository
+        Architecture v3 (1 Clé = 1 Agent = 1 RAG):
+        - Une clé API possède exactement un agent
+        - L'agent est créé automatiquement avec la clé
+        - Supprimer la clé supprime l'agent (CASCADE)
 
         Args:
             user_id: UUID de l'utilisateur propriétaire.
@@ -109,14 +108,16 @@ class ApiKeyService:
             scopes: Liste des permissions demandées.
             rate_limit_per_minute: Limite de requêtes par minute.
             expires_in_days: Expiration en jours (None = jamais).
-            agent_id: UUID de l'agent à lier (optionnel).
+            agent_name: Nom de l'agent (défaut: "Agent pour {name}").
+            agent_model_id: ID du modèle LLM.
+            agent_system_prompt: Prompt système personnalisé.
+            agent_rag_enabled: Activer le RAG.
 
         Returns:
             CreateKeyResult contenant la clé brute et ses informations.
 
         Raises:
             QuotaExceededError: Si l'utilisateur a atteint sa limite.
-            ValueError: Si les paramètres sont invalides.
         """
         # 1. Vérifier les quotas utilisateur
         limits = self._sub_repo.check_user_limits(user_id, "api_key")
@@ -137,7 +138,6 @@ class ApiKeyService:
         safe_scopes = [s for s in scopes if s not in self.FORBIDDEN_SCOPES_SELF_SERVICE]
 
         if not safe_scopes:
-            # Fallback sur query si tous les scopes demandés sont interdits
             safe_scopes = [ApiKeyScope.QUERY.value]
             logger.warning(
                 "All requested scopes were forbidden, falling back to query",
@@ -145,34 +145,9 @@ class ApiKeyService:
                 requested_scopes=scopes,
             )
 
-        # 3. Gérer l'agent
-        final_agent_id = agent_id
-        if not final_agent_id:
-            # Créer un agent par défaut ou utiliser le premier existant
-            from src.models.agent import AgentCreate
-            from src.repositories.agent_repository import AgentRepository
-
-            agent_repo = AgentRepository()
-            agents = agent_repo.get_by_user(user_id, active_only=True)
-
-            if agents:
-                final_agent_id = str(agents[0].id)
-            else:
-                # Créer un agent par défaut
-                new_agent = AgentCreate(
-                    name=f"Agent pour {name}",
-                    description="Agent créé automatiquement",
-                    model_id="mistral-large-latest",
-                    rag_enabled=True,
-                )
-                created_agent = agent_repo.create_agent(user_id, new_agent)
-                final_agent_id = str(created_agent.id)
-                logger.info("Auto-created agent for key", agent_id=final_agent_id, user_id=user_id)
-
-        # 4. Créer la clé via repository
+        # 3. Créer la clé API d'abord (sans agent_id pour l'instant)
         create_data = {
             "user_id": user_id,
-            "agent_id": final_agent_id,
             "name": name,
             "scopes": safe_scopes,
             "rate_limit_per_minute": rate_limit_per_minute,
@@ -180,20 +155,42 @@ class ApiKeyService:
         }
 
         result = self._key_repo.create(create_data)
+        key_id = result["id"]
+
+        # 4. Créer l'agent lié à cette clé
+        from src.models.agent import AgentCreate
+        from src.repositories.agent_repository import AgentRepository
+
+        agent_repo = AgentRepository()
+        
+        final_agent_name = agent_name or f"Agent pour {name}"
+        new_agent = AgentCreate(
+            name=final_agent_name,
+            description=f"Agent créé avec la clé {name}",
+            model_id=agent_model_id,
+            system_prompt=agent_system_prompt,
+            rag_enabled=agent_rag_enabled,
+        )
+        
+        created_agent = agent_repo.create_agent_with_key(
+            user_id=user_id, 
+            agent_data=new_agent, 
+            api_key_id=key_id
+        )
 
         logger.info(
-            "API key created for user",
+            "API key and agent created",
             user_id=user_id,
-            key_id=result["id"],
-            agent_id=final_agent_id,
-            name=name,
-            scopes=safe_scopes,
+            key_id=key_id,
+            agent_id=str(created_agent.id),
+            key_name=name,
+            agent_name=final_agent_name,
         )
 
         # 5. Construire la réponse
         key_info = ApiKeyInfo(
             id=result["id"],
-            agent_id=result.get("agent_id", final_agent_id),
+            agent_id=created_agent.id,
             name=result["name"],
             prefix=result["prefix"],
             scopes=result["scopes"],
@@ -202,10 +199,9 @@ class ApiKeyService:
             expires_at=result.get("expires_at"),
             last_used_at=result.get("last_used_at"),
             created_at=result.get("created_at"),
-            # Agent info (sera peuplé par le repository)
-            agent_name=result.get("agent_name"),
-            agent_model_id=result.get("agent_model_id", "mistral-large-latest"),
-            rag_enabled=result.get("rag_enabled", True),
+            agent_name=final_agent_name,
+            agent_model_id=agent_model_id,
+            rag_enabled=agent_rag_enabled,
         )
 
         return CreateKeyResult(

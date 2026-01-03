@@ -98,7 +98,11 @@ async def create_my_key(
             scopes=scopes,
             rate_limit_per_minute=request.rate_limit_per_minute,
             expires_in_days=request.expires_in_days,
-            agent_id=str(request.agent_id) if request.agent_id else None,
+            # Config agent (nouvelle architecture)
+            agent_name=request.agent_name,
+            agent_model_id=request.agent_model_id,
+            agent_system_prompt=request.agent_system_prompt,
+            agent_rag_enabled=request.agent_rag_enabled,
         )
 
         return ApiKeyResponse(

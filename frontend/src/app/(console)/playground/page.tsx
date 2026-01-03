@@ -9,6 +9,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { 
   Send, 
   Loader2, 
@@ -23,12 +24,15 @@ import {
   Sparkles,
   Zap,
   ShieldCheck,
-  Globe
+  Globe,
+  Key,
+  Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Tooltip,
   TooltipContent,
@@ -38,7 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useChat } from "@/hooks/useChat";
 import { usePanelState } from "@/hooks/usePanelState";
-import { useAgents } from "@/hooks/useAgents";
+import { useUserApiKeysManager } from "@/hooks/useUserApiKeys";
 import { CodePreview } from "@/components/playground/code-preview";
 import AgentConfigPanel from "@/components/playground/AgentConfigPanel";
 import type { Message } from "@/types/api";
@@ -56,34 +60,36 @@ const DEFAULT_PARAMS = {
 export default function PlaygroundPage() {
   const [input, setInput] = useState("");
   const [parameters, setParameters] = useState(DEFAULT_PARAMS);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedKeyId, setSelectedKeyId] = useState<string | null>(null);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Hook Agents (Multi-Agent Management)
-  const { agents, activeKey, createAgent } = useAgents(selectedAgentId || undefined);
+  // Hook Clés API (Architecture v3: 1 Clé = 1 Agent = 1 RAG)
+  const { keys, isLoading: isLoadingKeys } = useUserApiKeysManager();
 
-  // Auto-select first agent if none selected
+  // Clé sélectionnée
+  const selectedKey = keys.find(k => k.id === selectedKeyId) || keys[0];
+
+  // Auto-select first key if none selected
   useEffect(() => {
-    if (agents.length > 0 && !selectedAgentId) {
-        // Try to recover from localStorage if needed, or first agent
-        const savedId = localStorage.getItem('playground_agent_id');
-        const found = savedId ? agents.find(a => a.id === savedId) : null;
+    if (keys.length > 0 && !selectedKeyId) {
+        const savedId = localStorage.getItem('playground_key_id');
+        const found = savedId ? keys.find(k => k.id === savedId) : null;
         if (found) {
-            setSelectedAgentId(found.id);
+            setSelectedKeyId(found.id);
         } else {
-            setSelectedAgentId(agents[0].id);
+            setSelectedKeyId(keys[0].id);
         }
     }
-  }, [agents, selectedAgentId]);
+  }, [keys, selectedKeyId]);
 
   // Persist selection
   useEffect(() => {
-    if (selectedAgentId) {
-        localStorage.setItem('playground_agent_id', selectedAgentId);
+    if (selectedKeyId) {
+        localStorage.setItem('playground_key_id', selectedKeyId);
     }
-  }, [selectedAgentId]);
+  }, [selectedKeyId]);
 
 
   // Panel state management with persistence
@@ -146,6 +152,42 @@ export default function PlaygroundPage() {
       };
     });
   }, []);
+
+  // État vide: Pas de clé API
+  if (!isLoadingKeys && keys.length === 0) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-background p-8">
+        <Card className="max-w-md border-border/50 bg-card/50 backdrop-blur-xl">
+          <CardContent className="flex flex-col items-center text-center pt-12 pb-8 px-8">
+            <div className="h-20 w-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
+              <Key className="h-10 w-10 text-primary" />
+            </div>
+            
+            <h2 className="text-xl font-bold text-foreground mb-2">
+              Aucune Clé API
+            </h2>
+            
+            <p className="text-muted-foreground mb-6">
+              Créez votre première clé API pour configurer votre agent IA et commencer à utiliser le Playground.
+            </p>
+            
+            <div className="space-y-3 w-full">
+              <Link href="/keys">
+                <Button className="w-full gap-2 bg-primary hover:bg-primary/90">
+                  <Plus className="h-4 w-4" />
+                  Créer ma première clé
+                </Button>
+              </Link>
+              
+              <p className="text-xs text-muted-foreground">
+                Chaque clé API est liée à un agent unique avec son propre RAG et ses documents.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
@@ -347,19 +389,17 @@ export default function PlaygroundPage() {
         <CodePreview 
           parameters={parameters}
           requestContent={input}
-          agentId={selectedAgentId}
-          apiKey={activeKey?.key}
+          agentId={selectedKey?.agent_id}
+          apiKey={selectedKey?.prefix}
         />
       </div>
 
-      {/* Agent Config Panel (Right) - Collapsible on desktop, hidden on mobile unless toggled */}
+      {/* Config Panel (Right) - Collapsible on desktop, hidden on mobile unless toggled */}
       <div 
         className={cn(
           "border-l border-border bg-card/40 backdrop-blur-xl overflow-hidden transition-all duration-300 ease-in-out h-full flex flex-col",
-          // Desktop: toujours visible, width change based on collapsed state
           "hidden lg:flex",
           rightCollapsed ? "lg:w-0 lg:border-l-0" : "lg:w-[340px]",
-          // Mobile: absolute overlay when toggled open
           !rightCollapsed && "fixed inset-y-0 right-0 w-[300px] z-50 lg:relative lg:inset-auto"
         )}
       >
@@ -376,19 +416,28 @@ export default function PlaygroundPage() {
                   <PanelRightClose className="h-4 w-4" />
                 </Button>
               </div>
+              
+              {/* Info sur la clé sélectionnée */}
+              {selectedKey && (
+                <div className="mb-4 p-3 rounded-lg bg-primary/5 border border-primary/10">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Key className="h-4 w-4 text-primary" />
+                    <span className="font-medium text-sm">{selectedKey.name}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Agent: {selectedKey.agent_name || "Non configuré"}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {selectedKey.prefix}...
+                  </p>
+                </div>
+              )}
+              
               <AgentConfigPanel 
                 onConfigChange={handleConfigChange}
-                selectedAgentId={selectedAgentId}
-                onAgentSelect={setSelectedAgentId}
-                onCreateAgent={async (data) => {
-                    const newAgent = await createAgent({
-                        ...data,
-                        model_id: 'mistral-large-latest',
-                        rag_enabled: true,
-                        temperature: 0.7
-                    });
-                    setSelectedAgentId(newAgent.id);
-                }}
+                selectedAgentId={selectedKey?.agent_id}
+                onAgentSelect={() => {}}
+                onCreateAgent={async () => {}}
               />
             </div>
           </div>

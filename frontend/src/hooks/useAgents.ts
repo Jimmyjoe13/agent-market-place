@@ -42,27 +42,14 @@ export function useAgents(activeAgentId?: string) {
 
   // 4. Mutations
   
-  // Créer un agent
+  // Créer un agent (Note: dans architecture v3, les agents sont créés via les clés API)
   const createMutation = useMutation({
     mutationFn: async (newAgent: AgentCreate) => {
-      const agent = await api.createAgent(newAgent);
-      // Créer automatiquement une clé API pour le nouvel agent
-      try {
-        await api.createUserApiKey({
-          name: `Key for ${agent.name}`,
-          scopes: ["query"],
-          agent_id: agent.id
-        });
-      } catch (e) {
-        console.error("Erreur création clé auto", e);
-        // On ne bloque pas si la création de clé échoue
-      }
-      return agent;
+      return await api.createAgent(newAgent);
     },
-    onSuccess: (createdAgent) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.agents });
       toast.success('Agent créé avec succès');
-      // L'appelant devra gérer la sélection via le callback onSuccess si besoin
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail?.message || 'Erreur lors de la création');

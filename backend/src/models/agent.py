@@ -88,10 +88,13 @@ class AgentUpdate(BaseModel):
 class AgentInfo(BaseModel):
     """
     Informations sur un agent (pour les réponses API).
+    
+    Architecture v3: 1 Clé API = 1 Agent = 1 RAG.
     """
 
     id: UUID = Field(..., description="Identifiant unique")
     user_id: UUID = Field(..., description="Propriétaire")
+    api_key_id: UUID | None = Field(default=None, description="Clé API propriétaire")
     name: str = Field(..., description="Nom de l'agent")
     description: str | None = Field(default=None)
 

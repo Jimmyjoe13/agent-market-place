@@ -70,12 +70,13 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
 
     def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """
-        Crée une nouvelle clé API liée à un agent.
+        Crée une nouvelle clé API.
+
+        Architecture v3: La clé est créée d'abord, l'agent ensuite.
 
         Args:
             data: Dictionnaire avec:
                 - name: Nom de la clé
-                - agent_id: UUID de l'agent (requis)
                 - user_id: UUID de l'utilisateur (requis)
                 - scopes: Liste des permissions
                 - rate_limit_per_minute: Limite par minute
@@ -85,8 +86,6 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             Dictionnaire avec la clé complète (⚠️ affichée une seule fois).
         """
         # Validation
-        if not data.get("agent_id"):
-            raise ValueError("agent_id is required")
         if not data.get("user_id"):
             raise ValueError("user_id is required")
 
@@ -106,7 +105,6 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
         # Préparer les données pour insertion
         insert_data = {
             "name": data["name"],
-            "agent_id": str(data["agent_id"]),
             "user_id": str(data["user_id"]),
             "key_hash": key_hash,
             "key_prefix": key_prefix,
@@ -122,7 +120,6 @@ class ApiKeyRepository(BaseRepository[ApiKeyInfo]):
             "API key created",
             id=created["id"],
             name=data["name"],
-            agent_id=str(data["agent_id"]),
             prefix=key_prefix,
         )
 

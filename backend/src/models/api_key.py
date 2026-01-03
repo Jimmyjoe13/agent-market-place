@@ -41,17 +41,20 @@ class ApiKeyScope(str, Enum):
 
 class ApiKeyCreate(BaseModel):
     """
-    Schéma pour la création d'une nouvelle clé API.
+    Schéma pour la création d'une nouvelle clé API avec son agent.
 
-    Une clé API est liée à un agent existant.
-    Si agent_id n'est pas fourni, un agent par défaut sera créé.
+    Architecture v3: 1 Clé API = 1 Agent = 1 RAG.
+    L'agent est créé automatiquement avec la clé.
 
     Attributes:
         name: Nom descriptif de la clé.
-        agent_id: ID de l'agent à associer (optionnel).
         scopes: Liste des permissions accordées.
         rate_limit_per_minute: Limite de requêtes par minute.
         expires_in_days: Nombre de jours avant expiration.
+        agent_name: Nom de l'agent (optionnel, défaut = "Agent pour {name}").
+        agent_model_id: Modèle LLM à utiliser.
+        agent_system_prompt: Prompt système personnalisé.
+        agent_rag_enabled: Activer le RAG.
     """
 
     name: str = Field(
@@ -60,10 +63,6 @@ class ApiKeyCreate(BaseModel):
         min_length=3,
         max_length=100,
         examples=["Production App", "Test Environment"],
-    )
-    agent_id: UUID | None = Field(
-        default=None,
-        description="ID de l'agent à associer (optionnel, crée un agent si non fourni)",
     )
     scopes: list[ApiKeyScope] = Field(
         default=[ApiKeyScope.QUERY],
@@ -83,6 +82,26 @@ class ApiKeyCreate(BaseModel):
         ge=1,
         le=365,
         examples=[30, 90, None],
+    )
+    
+    # Configuration de l'agent créé avec la clé
+    agent_name: str | None = Field(
+        default=None,
+        description="Nom de l'agent (défaut: 'Agent pour {name}')",
+        max_length=100,
+    )
+    agent_model_id: str = Field(
+        default="mistral-large-latest",
+        description="Modèle LLM à utiliser",
+    )
+    agent_system_prompt: str | None = Field(
+        default=None,
+        description="Prompt système personnalisé",
+        max_length=10000,
+    )
+    agent_rag_enabled: bool = Field(
+        default=True,
+        description="Activer le RAG",
     )
 
     @field_validator("scopes")

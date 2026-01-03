@@ -146,6 +146,51 @@ class AgentRepository(BaseRepository[AgentInfo]):
 
         return agent
 
+    def create_agent_with_key(
+        self, 
+        user_id: str, 
+        agent_data: AgentCreate, 
+        api_key_id: str
+    ) -> AgentInfo:
+        """
+        Crée un nouvel agent lié à une clé API.
+
+        Architecture v3: 1 Clé = 1 Agent = 1 RAG.
+        L'agent est créé avec api_key_id pré-rempli.
+
+        Args:
+            user_id: UUID de l'utilisateur propriétaire.
+            agent_data: Données de création de l'agent.
+            api_key_id: UUID de la clé API propriétaire.
+
+        Returns:
+            AgentInfo créé.
+        """
+        data = {
+            "user_id": user_id,
+            "api_key_id": api_key_id,
+            "name": agent_data.name,
+            "description": agent_data.description,
+            "model_id": agent_data.model_id,
+            "system_prompt": agent_data.system_prompt,
+            "temperature": agent_data.temperature,
+            "rag_enabled": agent_data.rag_enabled,
+            "max_monthly_tokens": agent_data.max_monthly_tokens,
+            "max_daily_requests": agent_data.max_daily_requests,
+        }
+
+        agent = self.create(data)
+
+        self.logger.info(
+            "Agent created with key",
+            agent_id=str(agent.id),
+            api_key_id=api_key_id,
+            user_id=user_id,
+            name=agent_data.name,
+        )
+
+        return agent
+
     def update(self, agent_id: str, updates: AgentUpdate) -> AgentInfo | None:
         """
         Met à jour un agent.

@@ -143,7 +143,11 @@ export interface ApiKeyCreate {
   monthly_quota?: number;
   expires_in_days?: number;
   metadata?: Record<string, unknown>;
-  agent_id?: string;
+  // Config agent (nouvelle architecture 1 Clé = 1 Agent)
+  agent_name?: string;
+  agent_model_id?: string;
+  agent_system_prompt?: string;
+  agent_rag_enabled?: boolean;
 }
 
 export interface ApiKeyResponse {
