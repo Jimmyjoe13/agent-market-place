@@ -147,12 +147,12 @@ class ApiKeyInfo(BaseModel):
     """
     Informations sur une clé API (sans le secret).
 
-    Utilisé pour lister les clés existantes.
-    Inclut les informations de base de l'agent associé.
+    Architecture v3: 1 Clé = 1 Agent.
+    agent_id peut être None si l'agent n'est pas encore créé.
     """
 
     id: UUID = Field(..., description="Identifiant unique")
-    agent_id: UUID = Field(..., description="Agent associé")
+    agent_id: UUID | None = Field(default=None, description="Agent associé")
     name: str = Field(..., description="Nom descriptif")
     prefix: str = Field(..., description="Préfixe visible")
     scopes: list[str] = Field(..., description="Permissions")
