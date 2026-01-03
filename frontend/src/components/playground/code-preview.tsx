@@ -65,36 +65,54 @@ export function CodePreview({ parameters, requestContent, agentId, apiKey }: Cod
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const keyPlaceholder = apiKey ? `${apiKey.slice(0, 12)}...` : "YOUR_API_KEY";
+  // Afficher la clé complète ou placeholder
+  const displayKey = apiKey || "YOUR_API_KEY";
+  
+  // Escape helper pour JSON dans cURL (single quotes extérieures)
+  const escapeForJson = (str: string): string => {
+    if (!str) return "";
+    return str
+      .replace(/\\/g, "\\\\")     // Backslash first
+      .replace(/"/g, '\\"')       // Double quotes
+      .replace(/\n/g, "\\n")      // Newlines
+      .replace(/\r/g, "\\r")      // Carriage returns
+      .replace(/\t/g, "\\t");     // Tabs
+  };
 
   const generateCurl = () => {
-    return `curl -X POST https://agent-ia-augment.onrender.com/api/v1/query \\
+    const question = escapeForJson(requestContent || "Saisissez votre question...");
+    const systemPrompt = escapeForJson(parameters.systemPrompt || "");
+    
+    return `curl -X POST "https://agent-ia-augment.onrender.com/api/v1/query" \\
   -H "Content-Type: application/json" \\
-  -H "X-API-Key: ${keyPlaceholder}" \\
+  -H "X-API-Key: ${displayKey}" \\
   -d '{
-    "question": "${requestContent.replace(/"/g, '\\"') || "Saisissez votre question..."}",
+    "question": "${question}",
     "session_id": "optional-session-id",
     "model": "${parameters.model}",
-    "system_prompt": "${parameters.systemPrompt?.replace(/"/g, '\\"') || ""}",
+    "system_prompt": "${systemPrompt}",
     "temperature": ${parameters.temperature},
-    "use_rag": ${parameters.rag_enabled !== false ? "true" : "false"},
-    "use_web_search": ${parameters.useWebSearch ? "true" : "false"}
+    "use_rag": ${parameters.rag_enabled !== false},
+    "use_web_search": ${parameters.useWebSearch || false}
   }'`;
   };
 
   const generatePython = () => {
+    const question = requestContent || "Saisissez votre question...";
+    const systemPrompt = (parameters.systemPrompt || "").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+    
     return `import requests
 import json
 
 url = "https://agent-ia-augment.onrender.com/api/v1/query"
 headers = {
-    "X-API-Key": "${keyPlaceholder}",
+    "X-API-Key": "${displayKey}",
     "Content-Type": "application/json"
 }
 payload = {
-    "question": "${requestContent || "Saisissez votre question..."}",
+    "question": "${question}",
     "model": "${parameters.model}",
-    "system_prompt": "${parameters.systemPrompt?.replace(/"/g, '\\"') || ""}",
+    "system_prompt": "${systemPrompt}",
     "temperature": ${parameters.temperature},
     "use_rag": ${parameters.rag_enabled !== false ? "True" : "False"},
     "use_web_search": ${parameters.useWebSearch ? "True" : "False"}
@@ -105,19 +123,22 @@ print(json.dumps(response.json(), indent=2))`;
   };
 
   const generateJS = () => {
+    const question = requestContent || "Saisissez votre question...";
+    const systemPrompt = (parameters.systemPrompt || "").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+    
     return `const response = await fetch("https://agent-ia-augment.onrender.com/api/v1/query", {
   method: "POST",
   headers: {
-    "X-API-Key": "${keyPlaceholder}",
+    "X-API-Key": "${displayKey}",
     "Content-Type": "application/json"
   },
   body: JSON.stringify({
-    question: "${requestContent || "Saisissez votre question..."}",
+    question: "${question}",
     model: "${parameters.model}",
-    system_prompt: "${parameters.systemPrompt?.replace(/"/g, '\\"') || ""}",
+    system_prompt: "${systemPrompt}",
     temperature: ${parameters.temperature},
-    use_rag: ${parameters.rag_enabled !== false ? "true" : "false"},
-    use_web_search: ${parameters.useWebSearch ? "true" : "false"}
+    use_rag: ${parameters.rag_enabled !== false},
+    use_web_search: ${parameters.useWebSearch || false}
   })
 });
 
@@ -157,28 +178,31 @@ console.log(data);`;
           </TabsList>
         </div>
 
-        <div className="flex-1 relative overflow-auto p-4 group">
-          <TabsContent value="curl" className="m-0 font-mono text-xs text-zinc-300 leading-relaxed whitespace-pre">
-            {generateCurl()}
-          </TabsContent>
-          <TabsContent value="python" className="m-0 font-mono text-xs text-zinc-300 leading-relaxed whitespace-pre">
-            {generatePython()}
-          </TabsContent>
-          <TabsContent value="js" className="m-0 font-mono text-xs text-zinc-300 leading-relaxed whitespace-pre">
-            {generateJS()}
-          </TabsContent>
+        <div className="flex-1 relative overflow-hidden">
+          {/* Scrollable code container */}
+          <div className="absolute inset-0 overflow-auto p-4 group">
+            <TabsContent value="curl" className="m-0 font-mono text-xs text-zinc-300 leading-relaxed whitespace-pre min-w-max">
+              {generateCurl()}
+            </TabsContent>
+            <TabsContent value="python" className="m-0 font-mono text-xs text-zinc-300 leading-relaxed whitespace-pre min-w-max">
+              {generatePython()}
+            </TabsContent>
+            <TabsContent value="js" className="m-0 font-mono text-xs text-zinc-300 leading-relaxed whitespace-pre min-w-max">
+              {generateJS()}
+            </TabsContent>
 
-          <Button 
-            size="icon" 
-            variant="secondary" 
-            className="absolute top-4 right-4 h-8 w-8 bg-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={() => {
-              const val = document.querySelector('[data-state="active"].m-0')?.textContent || "";
-              copyToClipboard(val);
-            }}
-          >
-            {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
-          </Button>
+            <Button 
+              size="icon" 
+              variant="secondary" 
+              className="fixed bottom-8 right-8 h-8 w-8 bg-zinc-800 opacity-70 hover:opacity-100 transition-opacity z-10"
+              onClick={() => {
+                const val = document.querySelector('[data-state="active"].m-0')?.textContent || "";
+                copyToClipboard(val);
+              }}
+            >
+              {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
       </Tabs>
     </div>
