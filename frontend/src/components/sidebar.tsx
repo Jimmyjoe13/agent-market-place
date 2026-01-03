@@ -12,7 +12,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  MessageSquare,
   BarChart3,
   Key,
   FileUp,
@@ -23,7 +22,6 @@ import {
   BookOpen,
   Menu,
   X,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -44,12 +42,6 @@ import { useState } from "react";
 
 const navItems = [
   {
-    title: "Chat",
-    href: "/chat",
-    icon: MessageSquare,
-    description: "Discuter avec l'agent",
-  },
-  {
     title: "Playground",
     href: "/playground",
     icon: Terminal,
@@ -67,12 +59,6 @@ const navItems = [
     href: "/documents",
     icon: FileUp,
     description: "Gérer les documents",
-  },
-  {
-    title: "Assistant",
-    href: "/assistant",
-    icon: Sparkles,
-    description: "Widget Chatbot",
   },
   {
     title: "Clés API",

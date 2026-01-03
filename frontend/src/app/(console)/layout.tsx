@@ -11,6 +11,7 @@
 import { Sidebar } from "@/components/sidebar";
 import { SectionErrorBoundary } from "@/components/ui/error-boundary";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
+import HelpWidget from "@/components/HelpWidget";
 
 export default function ConsoleLayout({
   children,
@@ -39,6 +40,9 @@ export default function ConsoleLayout({
           </SectionErrorBoundary>
         </div>
       </main>
+      
+      {/* Help Widget - FAQ Chatbot flottant */}
+      <HelpWidget />
     </div>
   );
 }
