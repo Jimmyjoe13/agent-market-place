@@ -52,6 +52,8 @@ interface SendMessageOptions {
   useWebSearch?: boolean;
   forceRag?: boolean;
   enableReflection?: boolean;
+  systemPrompt?: string;
+  model?: string;
 }
 
 interface UseChatOptions {
@@ -96,6 +98,8 @@ export function useChat(options?: UseChatOptions) {
         use_web_search: options.useWebSearch,
         use_rag: options.forceRag,
         enable_reflection: options.enableReflection,
+        system_prompt: options.systemPrompt,
+        model: options.model,
       });
     },
     onSuccess: (data: QueryResponse) => {

@@ -118,7 +118,12 @@ export default function PlaygroundPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim() && !isLoading) {
-      sendMessage(input, parameters.useWebSearch); 
+      sendMessage(input, {
+        useWebSearch: parameters.useWebSearch,
+        forceRag: parameters.rag_enabled,
+        systemPrompt: parameters.systemPrompt,
+        model: parameters.model,
+      });
       setInput("");
     }
   };
