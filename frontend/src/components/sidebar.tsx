@@ -126,7 +126,7 @@ function DesktopSidebar() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.push("/login");
+    // La redirection est gérée automatiquement par useAuth
   };
 
   return (
@@ -220,7 +220,7 @@ function MobileSidebar() {
   const handleSignOut = async () => {
     setOpen(false);
     await signOut();
-    router.push("/login");
+    // La redirection est gérée automatiquement par useAuth
   };
 
   return (

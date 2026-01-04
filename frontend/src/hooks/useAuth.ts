@@ -79,6 +79,21 @@ export function useAuth(): UseAuthReturn {
       async (event: string, session: Session | null) => {
         console.log("[useAuth] Auth state changed:", event);
         
+        // Gestion de la déconnexion - redirection automatique
+        if (event === "SIGNED_OUT") {
+          setState({
+            user: null,
+            session: null,
+            loading: false,
+            error: null,
+          });
+          // Rediriger vers la page d'accueil
+          if (typeof window !== "undefined") {
+            window.location.href = "/";
+          }
+          return;
+        }
+        
         setState({
           user: session?.user ?? null,
           session,
