@@ -344,19 +344,19 @@ print(response.json()["sources"])`}
               </div>
               <CardHeader>
                 <CardTitle className="text-xl">Pro</CardTitle>
-                <CardDescription>Pour les développeurs sérieux</CardDescription>
+                <CardDescription>Évolutif avec vos besoins</CardDescription>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">39.99€</span>
+                  <span className="text-4xl font-bold">29.99€</span>
                   <span className="text-zinc-500">/mois</span>
                 </div>
                 <div className="text-sm text-zinc-400 mt-1">
-                  ou <span className="text-indigo-400 font-medium">429.88€/an</span>
-                  <span className="ml-1 text-green-400">(économisez 11%)</span>
+                  ou <span className="text-indigo-400 font-medium">311.88€/an</span>
+                  <span className="ml-1 text-green-400">(économisez 13%)</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-3">
-                  {["5 000 requêtes/mois", "5 clés API", "100 documents", "Support email", "Playground avancé"].map((item) => (
+                  {["500 requêtes/mois incluses", "2 agents", "25 documents", "2 clés API", "Support email", "BYOK", "+0.06€ par requête supplémentaire"].map((item) => (
                     <li key={item} className="flex items-center gap-2 text-sm text-zinc-400">
                       <Check className="h-4 w-4 text-green-400" />
                       {item}
@@ -371,26 +371,25 @@ print(response.json()["sources"])`}
               </CardContent>
             </Card>
             
-            {/* Scale Plan */}
+            {/* Enterprise Plan */}
             <Card className="border-zinc-800 bg-zinc-900/50">
               <CardHeader>
-                <CardTitle className="text-xl">Scale</CardTitle>
-                <CardDescription>Pour les équipes en croissance</CardDescription>
+                <CardTitle className="text-xl">Enterprise</CardTitle>
+                <CardDescription>Solution sur mesure</CardDescription>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">99€</span>
-                  <span className="text-zinc-500">/mois</span>
+                  <span className="text-4xl font-bold">Sur devis</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-3">
-                  {["50 000 requêtes/mois", "Clés illimitées", "Documents illimités", "Support prioritaire", "Webhooks & Analytics"].map((item) => (
+                  {["Requêtes illimitées", "Agents illimités", "Documents illimités", "Support dédié", "SLA 99.9%", "SSO/SAML"].map((item) => (
                     <li key={item} className="flex items-center gap-2 text-sm text-zinc-400">
                       <Check className="h-4 w-4 text-green-400" />
                       {item}
                     </li>
                   ))}
                 </ul>
-                <Link href="/register" className="block">
+                <Link href="mailto:contact@rag-agent.com" className="block">
                   <Button className="w-full" variant="outline">
                     Contacter les ventes
                   </Button>

@@ -142,11 +142,11 @@ export function BillingSection() {
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Zap className="h-4 w-4 text-amber-400" /> Passer à Pro
               </CardTitle>
-              <CardDescription>Débloquez des limites plus hautes et les modèles premium.</CardDescription>
+              <CardDescription>Débloquez des limites plus élevées et le paiement à l&apos;usage.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <ul className="space-y-2 mb-4">
-                {["Requêtes illimitées", "Support prioritaire", "Modèles GPT-4 & Claude 3", "Accès API précoce"].map((feature) => (
+                {["500 requêtes/mois incluses", "2 agents & 25 documents", "BYOK (vos propres clés IA)", "Support email prioritaire", "+0.06€ par requête supplémentaire"].map((feature) => (
                   <li key={feature} className="flex items-center gap-2 text-xs text-zinc-400">
                     <Check className="h-3 w-3 text-green-500" /> {feature}
                   </li>
@@ -159,7 +159,7 @@ export function BillingSection() {
                   disabled={!!isRedirecting}
                 >
                   {isRedirecting === "monthly" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  Plan Mensuel (19€/m) <ArrowUpRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                  Plan Mensuel (29.99€/mois) <ArrowUpRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                 </Button>
                 <Button 
                   variant="ghost"
@@ -168,7 +168,7 @@ export function BillingSection() {
                   disabled={!!isRedirecting}
                 >
                   {isRedirecting === "yearly" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                  2 mois offerts avec le plan annuel
+                  Plan annuel 311.88€/an (13% de réduction)
                 </Button>
               </div>
             </CardContent>
