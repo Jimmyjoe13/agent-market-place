@@ -54,7 +54,8 @@ const DEFAULT_PARAMS = {
   maxTokens: 2048,
   topP: 1,
   systemPrompt: "Vous êtes un assistant IA expert en RAG (Retrieval Augmented Generation). Répondez de manière précise et concise en vous basant sur le contexte fourni.",
-  useWebSearch: true
+  useWebSearch: true,
+  rag_enabled: true,
 };
 
 export default function PlaygroundPage() {
@@ -137,7 +138,8 @@ export default function PlaygroundPage() {
         prev.systemPrompt === newParams.system_prompt &&
         prev.temperature === newParams.temperature &&
         prev.maxTokens === newParams.max_tokens &&
-        (prev as any).agentId === newParams.agent_id
+        (prev as any).agentId === newParams.agent_id &&
+        (prev as any).rag_enabled === newParams.rag_enabled
       ) {
         return prev;
       }
@@ -149,6 +151,7 @@ export default function PlaygroundPage() {
         maxTokens: newParams.max_tokens,
         agentId: newParams.agent_id,
         agentName: newParams.name,
+        rag_enabled: newParams.rag_enabled,
       };
     });
   }, []);
