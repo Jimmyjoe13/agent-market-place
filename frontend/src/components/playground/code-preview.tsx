@@ -93,7 +93,7 @@ export function CodePreview({ parameters, requestContent, agentId, apiKey }: Cod
     "system_prompt": "${systemPrompt}",
     "temperature": ${parameters.temperature},
     "use_rag": ${parameters.rag_enabled ?? true},
-    "use_web_search": ${parameters.useWebSearch || false}
+    "use_web_search": ${parameters.useWebSearch ?? true}
   }'`;
   };
 
@@ -115,7 +115,7 @@ payload = {
     "system_prompt": "${systemPrompt}",
     "temperature": ${parameters.temperature},
     "use_rag": ${(parameters.rag_enabled ?? true) ? "True" : "False"},
-    "use_web_search": ${parameters.useWebSearch ? "True" : "False"}
+    "use_web_search": ${(parameters.useWebSearch ?? true) ? "True" : "False"}
 }
 
 response = requests.post(url, json=payload, headers=headers)
@@ -138,7 +138,7 @@ print(json.dumps(response.json(), indent=2))`;
     system_prompt: "${systemPrompt}",
     temperature: ${parameters.temperature},
     use_rag: ${parameters.rag_enabled ?? true},
-    use_web_search: ${parameters.useWebSearch || false}
+    use_web_search: ${parameters.useWebSearch ?? true}
   })
 });
 

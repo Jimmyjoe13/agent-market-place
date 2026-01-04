@@ -139,7 +139,8 @@ export default function PlaygroundPage() {
         prev.temperature === newParams.temperature &&
         prev.maxTokens === newParams.max_tokens &&
         (prev as any).agentId === newParams.agent_id &&
-        (prev as any).rag_enabled === newParams.rag_enabled
+        (prev as any).rag_enabled === newParams.rag_enabled &&
+        prev.useWebSearch === newParams.use_web_search
       ) {
         return prev;
       }
@@ -152,6 +153,7 @@ export default function PlaygroundPage() {
         agentId: newParams.agent_id,
         agentName: newParams.name,
         rag_enabled: newParams.rag_enabled,
+        useWebSearch: newParams.use_web_search,
       };
     });
   }, []);

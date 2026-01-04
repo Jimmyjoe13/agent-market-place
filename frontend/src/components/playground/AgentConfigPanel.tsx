@@ -44,7 +44,8 @@ import {
   ChevronDown,
   Info,
   Plus,
-  Bot
+  Bot,
+  Globe
 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Separator } from '@/components/ui/separator';
@@ -96,6 +97,7 @@ export default function AgentConfigPanel({
     model_id: 'mistral-large-latest',
     system_prompt: '',
     rag_enabled: true,
+    use_web_search: true,
     temperature: 0.7,
     max_tokens: 2048,
     top_p: 1.0,
@@ -113,16 +115,17 @@ export default function AgentConfigPanel({
   // Synchroniser l'état local quand l'agent sélectionné change
   useEffect(() => {
     if (selectedAgent) {
-      setLocalConfig({
+      setLocalConfig(prev => ({
         name: selectedAgent.name,
         description: selectedAgent.description || '',
         model_id: selectedAgent.model_id,
         system_prompt: selectedAgent.system_prompt || '',
         rag_enabled: selectedAgent.rag_enabled,
+        use_web_search: prev.use_web_search, // Préserver la préférence de session
         temperature: selectedAgent.temperature ?? 0.7,
         max_tokens: selectedAgent.max_monthly_tokens > 0 ? 0 : 2048,
         top_p: 1.0,
-      });
+      }));
       setHasChanges(false);
     }
   }, [selectedAgent]);
@@ -342,6 +345,25 @@ export default function AgentConfigPanel({
               checked={localConfig.rag_enabled}
               onCheckedChange={(checked) =>
                 setLocalConfig(prev => ({ ...prev, rag_enabled: checked }))
+              }
+            />
+          </div>
+
+          {/* Toggle Web Search */}
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-secondary/10">
+            <div className="space-y-0.5">
+              <Label className="flex items-center gap-2 text-sm">
+                <Globe className="h-4 w-4 text-emerald-500" />
+                Recherche Web
+              </Label>
+              <p className="text-[10px] text-muted-foreground">
+                Recherche temps réel
+              </p>
+            </div>
+            <Switch
+              checked={localConfig.use_web_search}
+              onCheckedChange={(checked) =>
+                setLocalConfig(prev => ({ ...prev, use_web_search: checked }))
               }
             />
           </div>
