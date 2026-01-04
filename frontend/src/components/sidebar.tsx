@@ -9,7 +9,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   BarChart3,
@@ -22,6 +22,7 @@ import {
   BookOpen,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -39,6 +40,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   {
@@ -119,6 +121,13 @@ function NavItem({ item, isActive, showLabel = false, onClick }: NavItemProps) {
  */
 function DesktopSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/login");
+  };
 
   return (
     <div className="hidden md:flex h-full w-16 flex-col items-center border-r border-border bg-sidebar py-4">
@@ -171,6 +180,26 @@ function DesktopSidebar() {
           })}
         </TooltipProvider>
       </nav>
+
+      {/* Logout Button */}
+      <Separator className="my-4 w-8 bg-border" />
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-10 w-10 rounded-xl text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
+              onClick={handleSignOut}
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p className="font-medium">Déconnexion</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
@@ -180,10 +209,18 @@ function DesktopSidebar() {
  */
 function MobileSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { signOut } = useAuth();
   const [open, setOpen] = useState(false);
 
   const handleNavClick = () => {
     setOpen(false);
+  };
+
+  const handleSignOut = async () => {
+    setOpen(false);
+    await signOut();
+    router.push("/login");
   };
 
   return (
@@ -200,7 +237,7 @@ function MobileSidebar() {
           </Button>
         </SheetTrigger>
         
-        <SheetContent side="left" className="w-72 p-0 bg-sidebar" showCloseButton={false}>
+        <SheetContent side="left" className="w-72 p-0 bg-sidebar flex flex-col" showCloseButton={false}>
           <SheetHeader className="p-4 border-b border-border">
             <div className="flex items-center justify-between">
               <Link
@@ -250,8 +287,16 @@ function MobileSidebar() {
             })}
           </nav>
 
-          {/* Footer */}
-          <div className="p-4 border-t border-border">
+          {/* Footer with Logout */}
+          <div className="p-4 border-t border-border space-y-3">
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3 text-muted-foreground hover:bg-red-500/10 hover:text-red-500"
+              onClick={handleSignOut}
+            >
+              <LogOut className="h-5 w-5" />
+              Déconnexion
+            </Button>
             <p className="text-xs text-muted-foreground text-center">
               © 2024 RAG Agent. v0.1.0
             </p>
