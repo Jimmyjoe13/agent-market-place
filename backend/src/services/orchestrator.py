@@ -43,16 +43,26 @@ class RoutingDecision:
     reasoning: str = ""
     latency_ms: int = 0
 
-    # Force overrides (depuis l'UI)
+    # Force overrides (depuis l'UI) - active même si le routeur dit non
     force_rag: bool = False
     force_web: bool = False
+    
+    # Disable overrides (depuis l'UI) - désactive même si le routeur dit oui
+    disable_rag: bool = False
+    disable_web: bool = False
 
     @property
     def should_use_rag(self) -> bool:
+        # Si explicitement désactivé, ne jamais utiliser
+        if self.disable_rag:
+            return False
         return self.use_rag or self.force_rag
 
     @property
     def should_use_web(self) -> bool:
+        # Si explicitement désactivé, ne jamais utiliser
+        if self.disable_web:
+            return False
         return self.use_web or self.force_web
 
 
@@ -162,6 +172,8 @@ Question : """
         force_rag: bool = False,
         force_web: bool = False,
         force_reflection: bool = False,
+        disable_rag: bool = False,
+        disable_web: bool = False,
     ) -> RoutingDecision:
         """
         Détermine le meilleur chemin pour traiter une requête.
@@ -171,6 +183,8 @@ Question : """
             force_rag: Forcer l'utilisation du RAG.
             force_web: Forcer la recherche web.
             force_reflection: Forcer le mode réflexion.
+            disable_rag: Désactiver explicitement le RAG.
+            disable_web: Désactiver explicitement la recherche web.
 
         Returns:
             RoutingDecision avec le chemin optimal.
@@ -184,6 +198,8 @@ Question : """
             if cached:
                 cached.force_rag = force_rag
                 cached.force_web = force_web
+                cached.disable_rag = disable_rag
+                cached.disable_web = disable_web
                 cached.use_reflection = cached.use_reflection or force_reflection
                 return cached
 
@@ -192,6 +208,8 @@ Question : """
         if quick_decision and quick_decision.confidence >= 0.9:
             quick_decision.force_rag = force_rag
             quick_decision.force_web = force_web
+            quick_decision.disable_rag = disable_rag
+            quick_decision.disable_web = disable_web
             quick_decision.use_reflection = quick_decision.use_reflection or force_reflection
             quick_decision.latency_ms = int((time.time() - start_time) * 1000)
             self._cache_decision(query_lower, quick_decision)
@@ -203,6 +221,8 @@ Question : """
                 decision = await self._smart_route(query)
                 decision.force_rag = force_rag
                 decision.force_web = force_web
+                decision.disable_rag = disable_rag
+                decision.disable_web = disable_web
                 decision.use_reflection = decision.use_reflection or force_reflection
                 decision.latency_ms = int((time.time() - start_time) * 1000)
                 self._cache_decision(query_lower, decision)
@@ -221,6 +241,8 @@ Question : """
             latency_ms=int((time.time() - start_time) * 1000),
             force_rag=force_rag,
             force_web=force_web,
+            disable_rag=disable_rag,
+            disable_web=disable_web,
         )
 
     def _quick_detect(self, query: str) -> RoutingDecision | None:

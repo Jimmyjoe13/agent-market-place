@@ -285,10 +285,16 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         self.logger.info("Processing query", query_length=len(question))
 
         # 1. Routage intelligent
+        # Logique des flags:
+        # - use_rag=True  -> force RAG (même si routeur dit non)
+        # - use_rag=False -> disable RAG (même si routeur dit oui)
+        # - use_rag=None  -> laisse l'orchestrateur décider
         routing = await self._orchestrator.route(
             question,
-            force_rag=use_rag if use_rag is not None else False,
-            force_web=use_web if use_web is not None else False,
+            force_rag=use_rag is True,
+            force_web=use_web is True,
+            disable_rag=use_rag is False,
+            disable_web=use_web is False,
             force_reflection=(
                 enable_reflection
                 if enable_reflection is not None
@@ -502,8 +508,10 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
 
         routing = await self._orchestrator.route(
             question,
-            force_rag=use_rag if use_rag is not None else False,
-            force_web=use_web if use_web is not None else False,
+            force_rag=use_rag is True,
+            force_web=use_web is True,
+            disable_rag=use_rag is False,
+            disable_web=use_web is False,
             force_reflection=(
                 enable_reflection
                 if enable_reflection is not None
