@@ -349,6 +349,10 @@ print(response.json()["sources"])`}
                   <span className="text-4xl font-bold">39.99€</span>
                   <span className="text-zinc-500">/mois</span>
                 </div>
+                <div className="text-sm text-zinc-400 mt-1">
+                  ou <span className="text-indigo-400 font-medium">429.88€/an</span>
+                  <span className="ml-1 text-green-400">(économisez 11%)</span>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-3">

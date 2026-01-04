@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Save, User, Mail, Camera, Loader2, Shield, RotateCcw, HelpCircle } from "lucide-react";
+import { Save, User, Camera, Loader2, Shield, RotateCcw, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useOnboarding } from "@/components/onboarding/OnboardingTour";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,7 @@ export function ProfileSection() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const { resetOnboarding } = useOnboarding();
+  const { session, loading: authLoading } = useAuth();
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
@@ -44,8 +46,15 @@ export function ProfileSection() {
   });
 
   useEffect(() => {
+    // Attendre que la session soit disponible avant de charger le profil
+    if (authLoading || !session?.access_token) {
+      return;
+    }
+
     async function loadProfile() {
       try {
+        // S'assurer que le token est défini avant l'appel
+        api.setAccessToken(session!.access_token);
         const profile = await api.getUserProfile();
         form.reset({
           name: profile.name || "",
@@ -59,7 +68,7 @@ export function ProfileSection() {
       }
     }
     loadProfile();
-  }, [form]);
+  }, [form, session, authLoading]);
 
   async function onSubmit(values: ProfileFormData) {
     setIsSaving(true);
