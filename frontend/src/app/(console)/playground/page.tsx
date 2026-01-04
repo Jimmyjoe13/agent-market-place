@@ -45,6 +45,7 @@ import { usePanelState } from "@/hooks/usePanelState";
 import { useUserApiKeysManager } from "@/hooks/useUserApiKeys";
 import { CodePreview } from "@/components/playground/code-preview";
 import AgentConfigPanel from "@/components/playground/AgentConfigPanel";
+import { MemoryPanel } from "@/components/playground/memory-panel";
 import type { Message } from "@/types/api";
 
 // Default parameters
@@ -458,6 +459,13 @@ export default function PlaygroundPage() {
                   <p className="text-xs text-muted-foreground font-mono">
                     {selectedKey.prefix}...
                   </p>
+                </div>
+              )}
+
+              {/* Mémoire de l'agent */}
+              {selectedKey?.agent_id && (
+                <div className="mb-4">
+                  <MemoryPanel agentId={selectedKey.agent_id} />
                 </div>
               )}
               

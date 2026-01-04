@@ -71,3 +71,11 @@ export {
   type RealtimeUsageResult,
 } from "./useRealtimeUsage";
 
+// Agent Memory
+export {
+  useAgentMemory,
+  type MemoryMessage,
+  type MemoryStats,
+  type AgentMemoryResponse,
+} from "./useAgentMemory";
+

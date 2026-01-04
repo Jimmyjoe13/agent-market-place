@@ -267,6 +267,32 @@ class ApiClient {
     return data;
   }
 
+  // Agent Memory
+  async getAgentMemory(agentId: string, limit?: number): Promise<{
+    agent_id: string;
+    agent_name: string;
+    memory_limit: number;
+    messages: Array<{
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+      created_at: string;
+    }>;
+    stats: {
+      count: number;
+      oldest_message: string | null;
+      newest_message: string | null;
+    };
+  }> {
+    const params = limit ? { limit } : {};
+    const { data } = await this.client.get(`/agents/${agentId}/memory`, { params });
+    return data;
+  }
+
+  async clearAgentMemory(agentId: string): Promise<void> {
+    await this.client.delete(`/agents/${agentId}/memory`);
+  }
+
   // Legacy (deprecated but kept for compatibility during migration)
   async getAgentConfig(): Promise<{
     agent_id: string;

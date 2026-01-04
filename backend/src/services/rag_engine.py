@@ -36,6 +36,7 @@ from src.services.orchestrator import (
     get_orchestrator,
 )
 from src.services.trace_service import get_trace_service
+from src.repositories.agent_memory_repository import AgentMemoryRepository
 
 
 @dataclass
@@ -166,6 +167,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         self._perplexity = PerplexityAgent()
         self._trace_service = get_trace_service()
         self._breaker = get_circuit_breaker()
+        self._memory_repo = AgentMemoryRepository()
 
         # Provider LLM principal
         self._llm_provider: BaseLLMProvider | None = None
@@ -262,6 +264,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
         user_id: str | None = None,
         api_key_id: str | None = None,
         model_id: str | None = None,
+        agent_id: str | None = None,
     ) -> RAGResponse:
         """
         Traite une requête de manière asynchrone avec routage intelligent.
@@ -275,6 +278,7 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             user_id: ID utilisateur pour l'isolation contextuelle.
             api_key_id: ID de la clé API/agent pour isolation documents.
             model_id: Modèle LLM à utiliser (override agent_config).
+            agent_id: ID de l'agent pour la mémoire conversationnelle.
 
         Returns:
             RAGResponse avec la réponse et les sources.
@@ -379,8 +383,21 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 provider_type, llm_config, cache=False, api_key=provider_api_key
             )
 
-        messages = provider.build_messages(
-            question,
+        # 5.5 Récupérer la mémoire de l'agent (si agent_id fourni)
+        memory_messages: list[dict[str, str]] = []
+        if agent_id:
+            memory_messages = self._memory_repo.get_as_llm_messages(agent_id)
+            self.logger.debug(
+                "Agent memory loaded",
+                agent_id=agent_id,
+                messages_count=len(memory_messages),
+            )
+
+        # 6. Construire les messages avec mémoire
+        messages = self._build_messages_with_memory(
+            provider=provider,
+            question=question,
+            memory=memory_messages,
             context=full_context if full_context else None,
             system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
         )
@@ -438,6 +455,18 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
                 thought_process=thought_process,
                 routing_decision=routing,
             )
+
+        # 8. Sauvegarder dans la mémoire de l'agent
+        if agent_id:
+            try:
+                self._memory_repo.add_exchange(agent_id, question, answer)
+                self.logger.debug(
+                    "Agent memory updated",
+                    agent_id=agent_id,
+                )
+            except Exception as e:
+                # Ne pas faire échouer la requête si la mémoire échoue
+                self.logger.warning("Failed to update agent memory", error=str(e))
 
         self.logger.info(
             "Query completed",
@@ -840,6 +869,55 @@ Réponds dans la langue de la question. Tutoie si l'utilisateur tutoie, vouvoie 
             )
 
         return "\n\n".join(parts) if parts else ""
+
+    def _build_messages_with_memory(
+        self,
+        provider: BaseLLMProvider,
+        question: str,
+        memory: list[dict[str, str]] | None = None,
+        context: str | None = None,
+        system_prompt: str | None = None,
+    ) -> list[dict[str, str]]:
+        """
+        Construit les messages LLM avec injection de la mémoire conversationnelle.
+
+        Structure des messages:
+        1. System prompt
+        2. Mémoire (historique des échanges précédents)
+        3. Contexte RAG/Web (dans le user message actuel)
+        4. Question utilisateur
+
+        Args:
+            provider: Provider LLM pour le format de messages.
+            question: Question de l'utilisateur.
+            memory: Historique des messages précédents.
+            context: Contexte RAG/Web fusionné.
+            system_prompt: Prompt système personnalisé.
+
+        Returns:
+            Liste de messages formatés pour le LLM.
+        """
+        messages: list[dict[str, str]] = []
+
+        # 1. System prompt
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        # 2. Mémoire conversationnelle (historique)
+        if memory:
+            messages.extend(memory)
+
+        # 3. Contexte RAG/Web + Question utilisateur
+        user_content = question
+        if context:
+            user_content = f"""Contexte disponible:
+{context}
+
+Question de l'utilisateur: {question}"""
+
+        messages.append({"role": "user", "content": user_content})
+
+        return messages
 
     async def _log_conversation(
         self,

@@ -276,6 +276,7 @@ export interface AgentInfo {
   system_prompt: string | null;
   temperature: number;
   rag_enabled: boolean;
+  memory_limit: number;
   max_monthly_tokens: number;
   max_daily_requests: number;
   tokens_used_this_month: number;
@@ -294,6 +295,7 @@ export interface AgentCreate {
   system_prompt?: string;
   temperature?: number;
   rag_enabled?: boolean;
+  memory_limit?: number;
 }
 
 export interface AgentUpdate {
@@ -303,5 +305,6 @@ export interface AgentUpdate {
   system_prompt?: string;
   temperature?: number;
   rag_enabled?: boolean;
+  memory_limit?: number;
   is_active?: boolean;
 }

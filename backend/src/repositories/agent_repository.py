@@ -133,6 +133,7 @@ class AgentRepository(BaseRepository[AgentInfo]):
             "rag_enabled": agent_data.rag_enabled,
             "max_monthly_tokens": agent_data.max_monthly_tokens,
             "max_daily_requests": agent_data.max_daily_requests,
+            "memory_limit": agent_data.memory_limit,
         }
 
         agent = self.create(data)
@@ -177,6 +178,7 @@ class AgentRepository(BaseRepository[AgentInfo]):
             "rag_enabled": agent_data.rag_enabled,
             "max_monthly_tokens": agent_data.max_monthly_tokens,
             "max_daily_requests": agent_data.max_daily_requests,
+            "memory_limit": agent_data.memory_limit,
         }
 
         agent = self.create(data)

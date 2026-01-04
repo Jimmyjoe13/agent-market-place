@@ -189,6 +189,7 @@ async def query_rag(
             user_id=str(api_key.user_id) if api_key.user_id else None,
             api_key_id=str(api_key.key_id) if api_key.key_id else None,  # Pour isolation documents
             model_id=api_key.model_id,  # Modèle LLM configuré sur l'agent
+            agent_id=str(api_key.agent_id) if api_key.agent_id else None,  # Pour mémoire agent
         )
 
         # Convertir les sources

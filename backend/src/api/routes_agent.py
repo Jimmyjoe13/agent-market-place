@@ -285,3 +285,85 @@ async def list_agent_keys(
         "keys": keys,
         "total": len(keys),
     }
+
+
+# ===== Agent Memory =====
+
+
+@router.get("/{agent_id}/memory")
+async def get_agent_memory(
+    agent_id: UUID,
+    limit: int | None = None,
+    user: UserWithSubscription = Depends(get_current_user),
+    agent_repo: AgentRepository = Depends(get_agent_repo),
+):
+    """
+    Récupère la mémoire conversationnelle d'un agent.
+
+    Retourne les derniers messages en mémoire (limite configurable par agent).
+
+    Args:
+        agent_id: UUID de l'agent.
+        limit: Nombre max de messages (optionnel, utilise la limite agent sinon).
+
+    Returns:
+        Liste des messages avec statistiques.
+    """
+    from src.repositories.agent_memory_repository import AgentMemoryRepository
+
+    # Vérifier propriété
+    agent = agent_repo.get_by_id(str(agent_id))
+    if not agent or agent.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found",
+        )
+
+    memory_repo = AgentMemoryRepository()
+    messages = memory_repo.get_messages(str(agent_id), limit)
+    stats = memory_repo.get_memory_stats(str(agent_id))
+
+    return {
+        "agent_id": str(agent_id),
+        "agent_name": agent.name,
+        "memory_limit": agent.memory_limit,
+        "messages": [msg.to_dict() for msg in messages],
+        "stats": stats,
+    }
+
+
+@router.delete("/{agent_id}/memory", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_agent_memory(
+    agent_id: UUID,
+    user: UserWithSubscription = Depends(get_current_user),
+    agent_repo: AgentRepository = Depends(get_agent_repo),
+):
+    """
+    Efface la mémoire conversationnelle d'un agent.
+
+    Utile pour "repartir de zéro" sans supprimer l'agent.
+    L'agent conserve sa configuration mais oublie tout l'historique.
+
+    Args:
+        agent_id: UUID de l'agent.
+    """
+    from src.repositories.agent_memory_repository import AgentMemoryRepository
+
+    # Vérifier propriété
+    agent = agent_repo.get_by_id(str(agent_id))
+    if not agent or agent.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent not found",
+        )
+
+    memory_repo = AgentMemoryRepository()
+    success = memory_repo.clear_memory(str(agent_id))
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to clear agent memory",
+        )
+
+    logger.info("Agent memory cleared", agent_id=str(agent_id), user_id=str(user.id))

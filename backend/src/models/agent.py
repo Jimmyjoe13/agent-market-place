@@ -69,6 +69,12 @@ class AgentCreate(BaseModel):
         description="Limite de requêtes par jour (0 = illimité)",
         ge=0,
     )
+    memory_limit: int = Field(
+        default=20,
+        description="Limite de messages en mémoire (0 = désactivé, max 100)",
+        ge=0,
+        le=100,
+    )
 
 
 class AgentUpdate(BaseModel):
@@ -82,6 +88,7 @@ class AgentUpdate(BaseModel):
     rag_enabled: bool | None = None
     max_monthly_tokens: int | None = Field(default=None, ge=0)
     max_daily_requests: int | None = Field(default=None, ge=0)
+    memory_limit: int | None = Field(default=None, ge=0, le=100)
     is_active: bool | None = None
 
 
@@ -103,6 +110,9 @@ class AgentInfo(BaseModel):
     system_prompt: str | None = Field(default=None)
     temperature: float = Field(default=0.7)
     rag_enabled: bool = Field(default=True)
+
+    # Mémoire conversationnelle
+    memory_limit: int = Field(default=20, description="Messages en mémoire (0 = désactivé)")
 
     # Budget
     max_monthly_tokens: int = Field(default=0)
