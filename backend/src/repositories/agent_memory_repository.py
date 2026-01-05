@@ -44,6 +44,87 @@ class AgentMemoryRepository(BaseRepository):
         """Initialise le repository."""
         super().__init__("agent_memory")
 
+    # ===== Implémentation des méthodes abstraites BaseRepository =====
+
+    def get_by_id(self, id: str) -> MemoryMessage | None:
+        """
+        Récupère un message mémoire par son ID.
+        
+        Args:
+            id: UUID du message.
+            
+        Returns:
+            MemoryMessage ou None si non trouvé.
+        """
+        try:
+            response = self.table.select("*").eq("id", id).execute()
+            if response.data and len(response.data) > 0:
+                msg = response.data[0]
+                created_at = msg.get("created_at")
+                if isinstance(created_at, str):
+                    try:
+                        created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                    except ValueError:
+                        created_at = datetime.now()
+                return MemoryMessage(
+                    id=msg["id"],
+                    role=msg["role"],
+                    content=msg["content"],
+                    created_at=created_at,
+                )
+            return None
+        except Exception as e:
+            self.logger.error("Failed to get memory message by id", error=str(e))
+            return None
+
+    def create(self, data: dict) -> MemoryMessage:
+        """
+        Crée un message mémoire directement (sans rotation FIFO).
+        
+        Note: Préférer add_message() qui gère la rotation automatique.
+        
+        Args:
+            data: Dict avec agent_id, role, content, metadata (optionnel).
+            
+        Returns:
+            MemoryMessage créé.
+        """
+        try:
+            response = self.table.insert(data).execute()
+            msg = response.data[0]
+            created_at = msg.get("created_at")
+            if isinstance(created_at, str):
+                try:
+                    created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                except ValueError:
+                    created_at = datetime.now()
+            return MemoryMessage(
+                id=msg["id"],
+                role=msg["role"],
+                content=msg["content"],
+                created_at=created_at,
+            )
+        except Exception as e:
+            self.logger.error("Failed to create memory message", error=str(e))
+            raise
+
+    def delete(self, id: str) -> bool:
+        """
+        Supprime un message mémoire par son ID.
+        
+        Args:
+            id: UUID du message.
+            
+        Returns:
+            True si succès.
+        """
+        try:
+            self.table.delete().eq("id", id).execute()
+            return True
+        except Exception as e:
+            self.logger.error("Failed to delete memory message", error=str(e))
+            return False
+
     def add_message(
         self,
         agent_id: str,
