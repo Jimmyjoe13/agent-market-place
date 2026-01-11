@@ -2,6 +2,8 @@
 Configuration pytest.
 """
 
+import secrets
+
 import pytest
 import sys
 from pathlib import Path
@@ -11,16 +13,26 @@ from unittest.mock import Mock, AsyncMock
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
+def _generate_test_key(prefix: str = "test") -> str:
+    """Génère une clé de test unique pour chaque exécution de test."""
+    return f"{prefix}_{secrets.token_hex(16)}"
+
+
 @pytest.fixture
 def mock_settings():
-    """Fixture pour les settings mockés."""
+    """Fixture pour les settings mockés avec clés générées dynamiquement."""
     settings = Mock()
-    settings.mistral_api_key = "test-mistral-key"
+    # Clés API générées dynamiquement (jamais de valeurs hardcodées)
+    settings.mistral_api_key = _generate_test_key("mistral")
     settings.supabase_url = "https://test.supabase.co"
-    settings.supabase_anon_key = "test-anon-key"
-    settings.supabase_service_role_key = "test-service-key"
-    settings.perplexity_api_key = "test-perplexity-key"
-    settings.github_access_token = "test-github-token"
+    settings.supabase_anon_key = _generate_test_key("anon")
+    settings.supabase_service_role_key = _generate_test_key("service")
+    settings.perplexity_api_key = _generate_test_key("perplexity")
+    settings.github_access_token = _generate_test_key("github")
+    settings.openai_api_key = _generate_test_key("openai")
+    settings.gemini_api_key = _generate_test_key("gemini")
+    settings.deepseek_api_key = _generate_test_key("deepseek")
+    # Configuration non-sensible
     settings.embedding_model = "mistral-embed"
     settings.embedding_dimension = 1024
     settings.similarity_threshold = 0.7
@@ -32,10 +44,6 @@ def mock_settings():
     settings.app_env = "development"
     settings.is_development = True
     settings.is_production = False
-    # Nouvelles clés API pour les providers alternatifs
-    settings.openai_api_key = "test-openai-key"
-    settings.gemini_api_key = "test-gemini-key"
-    settings.deepseek_api_key = "test-deepseek-key"
     settings.default_llm_provider = "mistral"
     return settings
 

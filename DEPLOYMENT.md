@@ -1,5 +1,8 @@
 # 🚀 Guide de Déploiement Production
 
+> ⚠️ **SÉCURITÉ** : Ne commitez jamais de vrais secrets dans ce fichier ou dans le repo.
+> Tous les exemples utilisent des placeholders (`<YOUR_PASSWORD>`, `your_key_here`).
+
 ## Prérequis
 
 - Compte [Render](https://render.com) (backend)
@@ -37,7 +40,7 @@ redis://default:PASSWORD@HOST:PORT
 Exemple :
 
 ```
-redis://default:abc123xyz@redis-12345.c1.eu-west-1-1.ec2.cloud.redislabs.com:12345
+redis://default:<YOUR_PASSWORD>@redis-12345.c1.eu-west-1-1.ec2.cloud.redislabs.com:12345
 ```
 
 ---
