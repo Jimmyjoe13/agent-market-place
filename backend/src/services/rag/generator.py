@@ -92,6 +92,14 @@ class RAGGenerator(LoggerMixin):
         current_model = model_id or self.config.llm_model
         provider_type = self.detect_provider_from_model(current_model)
 
+        self.logger.info(
+            "Selecting LLM provider",
+            requested_model_id=model_id,
+            config_model=self.config.llm_model,
+            selected_model=current_model,
+            provider_type=provider_type,
+        )
+
         # Récupérer les clés BYOK si disponibles
         user_keys = {}
         if user_id:

@@ -208,7 +208,14 @@ class AgentMemoryRepository(BaseRepository):
             
             messages = []
             for msg in response.data or []:
-                created_at = msg.get("created_at")
+                # Supporter les deux formats (avant/après migration 014)
+                # Après migration: memory_id, memory_role, memory_content, memory_created_at
+                # Avant migration: id, role, content, created_at
+                msg_id = msg.get("memory_id") or msg.get("id")
+                msg_role = msg.get("memory_role") or msg.get("role")
+                msg_content = msg.get("memory_content") or msg.get("content")
+                created_at = msg.get("memory_created_at") or msg.get("created_at")
+                
                 if isinstance(created_at, str):
                     try:
                         created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
@@ -216,9 +223,9 @@ class AgentMemoryRepository(BaseRepository):
                         created_at = datetime.now()
                 
                 messages.append(MemoryMessage(
-                    id=msg["id"],
-                    role=msg["role"],
-                    content=msg["content"],
+                    id=msg_id,
+                    role=msg_role,
+                    content=msg_content,
                     created_at=created_at,
                 ))
             

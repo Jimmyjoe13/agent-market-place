@@ -116,9 +116,15 @@ class DeepseekLLMProvider(BaseLLMProvider):
 
         Returns:
             LLMResponse avec le contenu généré.
+
+        Raises:
+            RuntimeError: Si le client n'est pas initialisé ou si la réponse est vide.
         """
         if not self._client:
-            raise RuntimeError("Deepseek client not initialized. Check DEEPSEEK_API_KEY.")
+            raise RuntimeError(
+                f"Deepseek client not initialized. Check DEEPSEEK_API_KEY environment variable. "
+                f"Model requested: {self.config.model}"
+            )
 
         start_time = time.time()
 
@@ -139,8 +145,22 @@ class DeepseekLLMProvider(BaseLLMProvider):
 
             latency_ms = int((time.time() - start_time) * 1000)
 
+            content = response.choices[0].message.content or ""
+
+            # Valider que la réponse n'est pas vide
+            if not content.strip():
+                self.logger.error(
+                    "Deepseek returned empty response",
+                    model=self.config.model,
+                    finish_reason=response.choices[0].finish_reason,
+                )
+                raise RuntimeError(
+                    f"Deepseek returned empty response for model {self.config.model}. "
+                    f"Finish reason: {response.choices[0].finish_reason}"
+                )
+
             return LLMResponse(
-                content=response.choices[0].message.content or "",
+                content=content,
                 tokens_input=response.usage.prompt_tokens if response.usage else 0,
                 tokens_output=response.usage.completion_tokens if response.usage else 0,
                 model_used=self.config.model,
