@@ -271,9 +271,11 @@ class AgentMemoryRepository(BaseRepository):
             Liste de dicts {"role": ..., "content": ...}
         """
         messages = self.get_messages(agent_id, limit)
+        # Filtrer les messages valides uniquement (role et content non-None)
         return [
             {"role": msg.role, "content": msg.content}
             for msg in messages
+            if msg.role and msg.content
         ]
 
     def get_memory_stats(self, agent_id: str) -> dict:

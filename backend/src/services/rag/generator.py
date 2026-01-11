@@ -193,8 +193,27 @@ class RAGGenerator(LoggerMixin):
             messages.append({"role": "system", "content": system_prompt})
 
         # 2. Mémoire conversationnelle (historique)
+        # IMPORTANT: Filtrer et valider les messages pour éviter content=null
         if memory:
-            messages.extend(memory)
+            for msg in memory:
+                role = msg.get("role")
+                content = msg.get("content")
+                
+                # Ignorer les messages invalides (sans role ou content)
+                if not role or content is None:
+                    self.logger.warning(
+                        "Skipping invalid memory message",
+                        role=role,
+                        has_content=content is not None,
+                    )
+                    continue
+                
+                # S'assurer que content est une chaîne non-vide
+                content_str = str(content).strip() if content else ""
+                if not content_str:
+                    continue
+                    
+                messages.append({"role": role, "content": content_str})
 
         # 3. Contexte RAG/Web + Question utilisateur
         user_content = question
