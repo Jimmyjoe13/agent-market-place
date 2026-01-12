@@ -347,11 +347,13 @@ async def query_rag_stream(
 
             async for event in rag.query_stream(
                 question=request.question,
-                system_prompt=request.system_prompt,
+                system_prompt=request.system_prompt or api_key.system_prompt,
                 use_web=request.use_web_search,
-                use_rag=request.use_rag,
+                use_rag=request.use_rag if api_key.rag_enabled is not False else False,
                 enable_reflection=request.enable_reflection,
                 user_id=str(api_key.user_id) if api_key.user_id else None,
+                api_key_id=str(api_key.key_id) if api_key.key_id else None,
+                model_id=api_key.model_id,
             ):
                 # Format SSE
                 event_type = event.get("event", "message")

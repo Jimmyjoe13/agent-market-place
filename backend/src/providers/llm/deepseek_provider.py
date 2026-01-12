@@ -35,7 +35,7 @@ class DeepseekLLMProvider(BaseLLMProvider):
     Aucune dépendance additionnelle requise.
     """
 
-    BASE_URL = "https://api.deepseek.com"
+    BASE_URL = "https://api.deepseek.com/v1"
 
     MODELS = [
         "deepseek-chat",
@@ -147,17 +147,26 @@ class DeepseekLLMProvider(BaseLLMProvider):
 
             content = response.choices[0].message.content or ""
 
-            # Valider que la réponse n'est pas vide
+            # Gérer les réponses vides ou tronquées
+            finish_reason = response.choices[0].finish_reason
             if not content.strip():
-                self.logger.error(
-                    "Deepseek returned empty response",
-                    model=self.config.model,
-                    finish_reason=response.choices[0].finish_reason,
-                )
-                raise RuntimeError(
-                    f"Deepseek returned empty response for model {self.config.model}. "
-                    f"Finish reason: {response.choices[0].finish_reason}"
-                )
+                if finish_reason == "length":
+                    self.logger.warning(
+                        "Deepseek response truncated (max tokens reached before content)",
+                        model=self.config.model,
+                        finish_reason=finish_reason,
+                    )
+                    content = "Je n'ai pas pu générer de réponse complète. Essayez de simplifier votre question."
+                else:
+                    self.logger.error(
+                        "Deepseek returned empty response",
+                        model=self.config.model,
+                        finish_reason=finish_reason,
+                    )
+                    raise RuntimeError(
+                        f"Deepseek returned empty response for model {self.config.model}. "
+                        f"Finish reason: {finish_reason}"
+                    )
 
             return LLMResponse(
                 content=content,

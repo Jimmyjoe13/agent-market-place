@@ -204,17 +204,28 @@ class OpenAILLMProvider(BaseLLMProvider):
 
             content = response.choices[0].message.content or ""
 
-            # Valider que la réponse n'est pas vide
+            # Gérer les réponses vides ou tronquées
+            finish_reason = response.choices[0].finish_reason
             if not content.strip():
-                self.logger.error(
-                    "OpenAI returned empty response",
-                    model=self.config.model,
-                    finish_reason=response.choices[0].finish_reason,
-                )
-                raise RuntimeError(
-                    f"OpenAI returned empty response for model {self.config.model}. "
-                    f"Finish reason: {response.choices[0].finish_reason}"
-                )
+                if finish_reason == "length":
+                    # Le modèle a atteint max_tokens avant de produire du contenu
+                    self.logger.warning(
+                        "OpenAI response truncated (max tokens reached before content)",
+                        model=self.config.model,
+                        finish_reason=finish_reason,
+                    )
+                    # Retourner un message explicatif au lieu de lever une exception
+                    content = "Je n'ai pas pu générer de réponse complète. Essayez de simplifier votre question ou contactez un modèle avec une fenêtre de contexte plus grande."
+                else:
+                    self.logger.error(
+                        "OpenAI returned empty response",
+                        model=self.config.model,
+                        finish_reason=finish_reason,
+                    )
+                    raise RuntimeError(
+                        f"OpenAI returned empty response for model {self.config.model}. "
+                        f"Finish reason: {finish_reason}"
+                    )
 
             return LLMResponse(
                 content=content,

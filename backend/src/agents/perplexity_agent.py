@@ -173,7 +173,12 @@ Règles :
             )
             return None
         except Exception as e:
-            self.logger.error("Web search failed", error=str(e))
+            error_msg = str(e) if str(e) else "Unknown error (empty exception message)"
+            self.logger.error(
+                "Web search failed",
+                error=error_msg,
+                error_type=type(e).__name__,
+            )
             return None
 
     def search_sync(
