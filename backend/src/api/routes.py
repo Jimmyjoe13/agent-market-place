@@ -163,6 +163,15 @@ async def query_rag(
 
         rag = get_rag_engine()
 
+        # LOG: Debug configuration de l'agent
+        logger.info(
+            "Agent config from API key",
+            agent_id=str(api_key.agent_id) if api_key.agent_id else None,
+            agent_name=api_key.agent_name,
+            model_id=api_key.model_id,
+            rag_enabled=api_key.rag_enabled,
+        )
+
         # Utiliser la session existante si fournie
         if request.session_id:
             rag._session_id = request.session_id

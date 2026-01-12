@@ -168,7 +168,12 @@ async def update_agent(
             detail="Failed to update agent",
         )
 
-    logger.info("Agent updated", agent_id=str(agent_id))
+    logger.info(
+        "Agent updated",
+        agent_id=str(agent_id),
+        updated_fields=updates.model_dump(exclude_none=True),
+        new_model_id=updated.model_id,
+    )
 
     return updated
 
