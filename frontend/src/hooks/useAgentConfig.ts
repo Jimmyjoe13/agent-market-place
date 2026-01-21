@@ -68,7 +68,7 @@ export function useAvailableModels() {
     queryKey: QUERY_KEYS.availableModels,
     queryFn: async () => {
       const response = await api.getAvailableModels();
-      return response.models;
+      return response.models || [];
     },
     staleTime: 1000 * 60 * 30, // 30 minutes (liste statique)
   });

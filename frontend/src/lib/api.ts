@@ -140,7 +140,7 @@ class ApiClient {
 
   async getUserApiKeys(): Promise<{ keys: ApiKeyInfo[]; total: number }> {
     const { data } = await this.client.get("/console/keys");
-    return data;
+    return { keys: data?.keys || [], total: data?.total ?? 0 };
   }
 
   async createUserApiKey(request: ApiKeyCreate): Promise<ApiKeyResponse> {
@@ -240,7 +240,7 @@ class ApiClient {
 
   async getAgents(): Promise<{ agents: AgentInfo[]; total: number }> {
     const { data } = await this.client.get("/agents");
-    return data;
+    return { agents: data?.agents || [], total: data?.total ?? 0 };
   }
 
   async createAgent(agent: AgentCreate): Promise<AgentInfo> {
@@ -264,7 +264,7 @@ class ApiClient {
 
   async getAgentKeys(agentId: string): Promise<{ keys: any[]; total: number }> {
     const { data } = await this.client.get(`/agents/${agentId}/keys`);
-    return data;
+    return { keys: data?.keys || [], total: data?.total ?? 0 };
   }
 
   // Agent Memory
@@ -286,7 +286,13 @@ class ApiClient {
   }> {
     const params = limit ? { limit } : {};
     const { data } = await this.client.get(`/agents/${agentId}/memory`, { params });
-    return data;
+    return {
+      agent_id: data?.agent_id || agentId,
+      agent_name: data?.agent_name || '',
+      memory_limit: data?.memory_limit ?? 20,
+      messages: data?.messages || [],
+      stats: data?.stats || { count: 0, oldest_message: null, newest_message: null },
+    };
   }
 
   async clearAgentMemory(agentId: string): Promise<void> {
@@ -338,7 +344,7 @@ class ApiClient {
     }>;
   }> {
     const { data } = await this.client.get("/agent/available-models");
-    return data;
+    return { models: data?.models || [] };
   }
 }
 
