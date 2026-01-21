@@ -111,7 +111,8 @@ export function useAuth(): UseAuthReturn {
     return () => {
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Ne pas dépendre de supabase car c'est un singleton stable
 
   // Sync utilisateur avec le backend (pour créer le profile si nécessaire)
   const syncUserWithBackend = async (session: Session) => {

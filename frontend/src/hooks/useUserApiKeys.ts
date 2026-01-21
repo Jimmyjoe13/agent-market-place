@@ -148,7 +148,7 @@ export function useUserApiKeysManager() {
 
   return {
     // Data
-    keys: keysQuery.data?.keys ?? [],
+    keys: keysQuery.data?.keys || [],
     total: keysQuery.data?.total ?? 0,
     
     // Loading states
